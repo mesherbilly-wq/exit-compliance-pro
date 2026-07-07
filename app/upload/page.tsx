@@ -1,7 +1,34 @@
+"use client";
+
+import Papa from "papaparse";
+import { useState } from "react";
+
+type CsvRow = Record<string, string>;
+
 export default function UploadPage() {
+  const [fileName, setFileName] = useState("");
+  const [rows, setRows] = useState<CsvRow[]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+
+  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+
+    Papa.parse<CsvRow>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        setRows(results.data);
+        setHeaders(results.meta.fields ?? []);
+      },
+    });
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <div className="mx-auto max-w-5xl px-6 py-10">
+      <div className="mx-auto max-w-6xl px-6 py-10">
         <a href="/" className="text-sm text-cyan-400 hover:text-cyan-300">
           ← Back to dashboard
         </a>
@@ -34,13 +61,53 @@ export default function UploadPage() {
               type="file"
               accept=".csv"
               className="hidden"
+              onChange={handleFileUpload}
             />
           </label>
 
-          <button className="mt-6 rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400">
-            Process CSV
-          </button>
+          {fileName && (
+            <p className="mt-4 text-sm text-slate-300">
+              Uploaded: <span className="font-semibold">{fileName}</span>
+            </p>
+          )}
         </section>
+
+        {rows.length > 0 && (
+          <section className="mt-10 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="text-2xl font-semibold">CSV Preview</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Showing {Math.min(rows.length, 10)} of {rows.length} rows.
+            </p>
+
+            <div className="mt-6 overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-slate-700 text-slate-300">
+                  <tr>
+                    {headers.map((header) => (
+                      <th key={header} className="whitespace-nowrap px-4 py-3">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 10).map((row, index) => (
+                    <tr key={index} className="border-b border-slate-800">
+                      {headers.map((header) => (
+                        <td
+                          key={header}
+                          className="whitespace-nowrap px-4 py-3 text-slate-300"
+                        >
+                          {row[header]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
