@@ -1,5 +1,5 @@
-import { CsvUploadForm } from "@/components/imports/csv-upload-form";
+import { ImportsPageContent } from "@/components/imports/imports-page-content";
 
 export default function ImportsPage() {
-  return <CsvUploadForm />;
+  return <ImportsPageContent />;
 }
