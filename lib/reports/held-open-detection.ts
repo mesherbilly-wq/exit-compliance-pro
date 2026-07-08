@@ -86,9 +86,22 @@ export function formatDuration(seconds: number | null): string {
 
 export type DoorComplianceStatus = "Compliant" | "Warning" | "Critical";
 
+export type DoorHealthStatus =
+  | "Excellent"
+  | "Good"
+  | "Needs Attention"
+  | "Critical";
+
 export function getDoorComplianceStatus(score: number): DoorComplianceStatus {
   if (score >= 85) return "Compliant";
   if (score >= 60) return "Warning";
+  return "Critical";
+}
+
+export function getDoorHealthStatus(score: number): DoorHealthStatus {
+  if (score >= 90) return "Excellent";
+  if (score >= 75) return "Good";
+  if (score >= 50) return "Needs Attention";
   return "Critical";
 }
 

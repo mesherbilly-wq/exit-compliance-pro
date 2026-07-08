@@ -7,7 +7,7 @@ export type NavItem = {
 export const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", match: "exact" },
   { label: "Imports", href: "/imports", match: "prefix" },
-  { label: "Doors", href: "/doors", match: "prefix" },
+  { label: "Doors", href: "/doors", match: "exact" },
   { label: "Compliance", href: "/compliance", match: "prefix" },
   { label: "Heat Maps", href: "/heat-maps", match: "prefix" },
   { label: "Trends", href: "/trends", match: "prefix" },
