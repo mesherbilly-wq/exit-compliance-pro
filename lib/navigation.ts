@@ -6,30 +6,25 @@ export type NavItem = {
 
 export const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", match: "exact" },
-  { label: "Customers", href: "/customers", match: "prefix" },
-  { label: "Sites", href: "/sites", match: "prefix" },
   { label: "Imports", href: "/imports", match: "prefix" },
-  { label: "Reports", href: "/reports", match: "prefix" },
-  { label: "Scheduled Reports", href: "/scheduled", match: "prefix" },
+  { label: "Doors", href: "/doors", match: "prefix" },
+  { label: "Compliance", href: "/compliance", match: "prefix" },
+  { label: "Heat Maps", href: "/heat-maps", match: "prefix" },
+  { label: "Trends", href: "/trends", match: "prefix" },
+  { label: "Executive Reports", href: "/executive-reports", match: "prefix" },
   { label: "Settings", href: "/settings", match: "prefix" },
 ];
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
-  "/customers": "Customers",
-  "/sites": "Sites",
   "/imports": "Imports",
   "/imports/upload": "Upload CSV",
   "/imports/mapping": "Field Mapping",
-  "/reports": "Reports",
-  "/reports/exit-compliance": "Exit Compliance Report",
-  "/reports/attendance": "Attendance Report",
-  "/reports/occupancy": "Occupancy Report",
-  "/reports/door-usage": "Door Usage Report",
-  "/reports/heat-map": "Heat Map Report",
-  "/reports/compliance-score": "Compliance Score Report",
-  "/reports/custom": "Custom Report Builder",
-  "/scheduled": "Scheduled Reports",
+  "/doors": "Doors",
+  "/compliance": "Compliance",
+  "/heat-maps": "Heat Maps",
+  "/trends": "Trends",
+  "/executive-reports": "Executive Reports",
   "/settings": "Settings",
 };
 
@@ -50,5 +45,5 @@ export function getPageTitle(pathname: string): string {
     .filter(([path]) => path !== "/")
     .find(([path]) => pathname.startsWith(path));
 
-  return match?.[1] ?? "Exit Compliance Pro";
+  return match?.[1] ?? "Fire Exit Compliance Pro";
 }

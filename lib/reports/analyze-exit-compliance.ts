@@ -7,7 +7,7 @@ export type ExitComplianceAnalysis = {
   uniqueDoors: number;
   forcedOpenEvents: number;
   heldOpenEvents: number;
-  accessDeniedEvents: number;
+  lifeSafetyExceptions: number;
   otherEvents: number;
   doorBreakdown: { door: string; count: number }[];
   recentExceptions: {
@@ -23,10 +23,9 @@ function getFieldValue(row: CsvRow, mapping: FieldMapping, key: keyof FieldMappi
   return column ? row[column]?.trim() ?? "" : "";
 }
 
-function classifyEvent(eventType: string, accessResult: string): keyof Pick<
-  ExitComplianceAnalysis,
-  "forcedOpenEvents" | "heldOpenEvents" | "accessDeniedEvents" | "otherEvents"
-> {
+type EventCategory = "forcedOpenEvents" | "heldOpenEvents" | "otherEvents";
+
+function classifyEvent(eventType: string, accessResult: string): EventCategory {
   const combined = `${eventType} ${accessResult}`.toLowerCase();
 
   if (combined.includes("forced") || combined.includes("force open")) {
@@ -35,14 +34,6 @@ function classifyEvent(eventType: string, accessResult: string): keyof Pick<
 
   if (combined.includes("held open") || combined.includes("held-open")) {
     return "heldOpenEvents";
-  }
-
-  if (
-    combined.includes("denied") ||
-    combined.includes("refused") ||
-    combined.includes("failed")
-  ) {
-    return "accessDeniedEvents";
   }
 
   return "otherEvents";
@@ -57,12 +48,11 @@ export function analyzeExitCompliance(
 
   let forcedOpenEvents = 0;
   let heldOpenEvents = 0;
-  let accessDeniedEvents = 0;
   let otherEvents = 0;
 
   for (const row of rows) {
     const eventType = getFieldValue(row, mapping, "eventType");
-    const doorName = getFieldValue(row, mapping, "doorName") || "Unknown door";
+    const doorName = getFieldValue(row, mapping, "doorName") || "Unknown exit door";
     const eventTime = getFieldValue(row, mapping, "eventTime");
     const accessResult = getFieldValue(row, mapping, "accessResult");
 
@@ -72,7 +62,6 @@ export function analyzeExitCompliance(
 
     if (category === "forcedOpenEvents") forcedOpenEvents += 1;
     if (category === "heldOpenEvents") heldOpenEvents += 1;
-    if (category === "accessDeniedEvents") accessDeniedEvents += 1;
     if (category === "otherEvents") otherEvents += 1;
 
     if (category !== "otherEvents") {
@@ -80,7 +69,9 @@ export function analyzeExitCompliance(
         time: eventTime || "—",
         type: eventType || "Unknown event",
         door: doorName,
-        result: accessResult || "—",
+        result:
+          accessResult ||
+          (category === "forcedOpenEvents" ? "Forced open" : "Held open"),
       });
     }
   }
@@ -95,7 +86,7 @@ export function analyzeExitCompliance(
     uniqueDoors: doorCounts.size,
     forcedOpenEvents,
     heldOpenEvents,
-    accessDeniedEvents,
+    lifeSafetyExceptions: forcedOpenEvents + heldOpenEvents,
     otherEvents,
     doorBreakdown,
     recentExceptions: exceptions.slice(0, 15),

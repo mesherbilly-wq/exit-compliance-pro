@@ -63,11 +63,11 @@ export function CsvUploadForm() {
           CSV Upload
         </p>
         <h2 className="mt-3 text-3xl font-bold tracking-tight">
-          Upload Genetec CSV Export
+          Upload Genetec Fire Exit Export
         </h2>
         <p className="mt-4 max-w-3xl text-slate-300">
-          Upload a Genetec access-control export so Exit Compliance Pro can
-          process door activity, attendance data and exception events.
+          Upload a Genetec fire exit export so Exit Compliance Pro can process
+          held-open events, forced-open incidents and door health data.
         </p>
       </div>
 

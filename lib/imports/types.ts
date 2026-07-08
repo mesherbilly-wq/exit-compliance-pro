@@ -31,9 +31,9 @@ export type GenetecFieldDefinition = {
 export const GENETEC_FIELDS: GenetecFieldDefinition[] = [
   { key: "eventTime", label: "Event time", required: true },
   { key: "eventType", label: "Event type", required: true },
-  { key: "doorName", label: "Door name", required: true },
-  { key: "cardholderName", label: "Cardholder name", required: false },
-  { key: "cardholderEmail", label: "Cardholder email", required: false },
+  { key: "doorName", label: "Exit door name", required: true },
+  { key: "cardholderName", label: "Cardholder name (optional)", required: false },
+  { key: "cardholderEmail", label: "Cardholder email (optional)", required: false },
   { key: "credentialNumber", label: "Credential/card number", required: false },
   { key: "accessResult", label: "Access result", required: false },
   { key: "siteBuilding", label: "Site/building", required: false },

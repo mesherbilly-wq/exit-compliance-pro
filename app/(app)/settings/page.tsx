@@ -1,10 +1,18 @@
-import { PagePlaceholder } from "@/components/ui/page-placeholder";
+import { FeaturePlaceholder } from "@/components/ui/section-page-shell";
 
 export default function SettingsPage() {
   return (
-    <PagePlaceholder
-      title="Settings"
-      description="Configure report templates, branding, email schedules and CSV mappings."
+    <FeaturePlaceholder
+      eyebrow="Settings"
+      title="Platform Settings"
+      description="Configure fire exit compliance thresholds, CSV field mappings, report templates and platform preferences."
+      features={[
+        "Compliance scoring thresholds",
+        "Held-open event duration limits",
+        "CSV field mapping defaults",
+        "Report branding and templates",
+        "Notification preferences",
+      ]}
     />
   );
 }

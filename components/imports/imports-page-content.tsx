@@ -24,11 +24,11 @@ export function ImportsPageContent() {
             Imports
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight">
-            Genetec CSV Imports
+            Genetec Fire Exit Imports
           </h2>
           <p className="mt-4 max-w-3xl text-slate-300">
-            Upload Genetec access-control exports, review recent imports, and
-            prepare files for field mapping and reporting.
+            Upload Genetec fire exit and door event exports, review recent
+            imports and prepare data for compliance analysis.
           </p>
         </div>
 

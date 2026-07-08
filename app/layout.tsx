@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Exit Compliance Pro",
   description:
-    "Genetec exit compliance and bespoke reporting for access control data.",
+    "Fire exit compliance and life safety platform for held-open events, door health and executive reporting.",
 };
 
 export default function RootLayout({

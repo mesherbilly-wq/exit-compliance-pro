@@ -121,14 +121,14 @@ export function FieldMappingContent() {
           Field Mapping
         </p>
         <h2 className="mt-3 text-3xl font-bold tracking-tight">
-          Map Genetec CSV Fields
+          Map Fire Exit CSV Fields
         </h2>
         <p className="mt-4 max-w-3xl text-slate-300">
-          Match detected CSV columns to Genetec fields for{" "}
+          Match detected CSV columns to fire exit fields for{" "}
           <span className="font-semibold text-white">
             {importRecord.fileName}
           </span>
-          . Required fields must be mapped before generating a report.
+          . Required fields must be mapped before running compliance analysis.
         </p>
       </div>
 
@@ -213,16 +213,16 @@ export function FieldMappingContent() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-400">
           {requiredMapped
-            ? "Required fields mapped. Report generation will be enabled in a future step."
+            ? "Required fields mapped. Compliance analysis is ready."
             : "Map Event time, Event type, and Door name to continue."}
         </p>
 
         {requiredMapped ? (
           <Link
-            href="/reports/exit-compliance"
+            href="/compliance"
             className="rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
           >
-            Generate Report
+            View Compliance Analysis
           </Link>
         ) : (
           <button
@@ -230,7 +230,7 @@ export function FieldMappingContent() {
             disabled
             className="cursor-not-allowed rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-500"
           >
-            Generate Report
+            View Compliance Analysis
           </button>
         )}
       </div>

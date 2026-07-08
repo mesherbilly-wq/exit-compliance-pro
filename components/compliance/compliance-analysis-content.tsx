@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ReportPageShell } from "@/components/reports/report-page-shell";
+import { SectionPageShell } from "@/components/ui/section-page-shell";
 import {
   analyzeExitCompliance,
   canRunExitComplianceAnalysis,
 } from "@/lib/reports/analyze-exit-compliance";
 import type { ExitComplianceAnalysis } from "@/lib/reports/analyze-exit-compliance";
-import { getReportBySlug } from "@/lib/reports/config";
 import {
   getFieldMapping,
   getLatestImport,
@@ -16,9 +15,7 @@ import {
 } from "@/lib/imports/storage";
 import type { FieldMapping, ImportRecord } from "@/lib/imports/types";
 
-const report = getReportBySlug("exit-compliance")!;
-
-export function ExitComplianceReportContent() {
+export function ComplianceAnalysisContent() {
   const [importRecord, setImportRecord] = useState<ImportRecord | null>(null);
   const [mapping, setMapping] = useState<FieldMapping | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -42,19 +39,27 @@ export function ExitComplianceReportContent() {
 
   if (!loaded) {
     return (
-      <ReportPageShell report={report}>
-        <p className="text-sm text-slate-400">Loading report...</p>
-      </ReportPageShell>
+      <SectionPageShell
+        eyebrow="Compliance"
+        title="Fire Exit Compliance"
+        description="Loading compliance analysis..."
+      >
+        <p className="text-sm text-slate-400">Loading...</p>
+      </SectionPageShell>
     );
   }
 
   if (!analysis || !importRecord) {
     return (
-      <ReportPageShell report={report}>
+      <SectionPageShell
+        eyebrow="Compliance"
+        title="Fire Exit Compliance"
+        description="Analyse held-open exit events, forced-open incidents, door health and compliance scoring from imported Genetec fire exit data."
+      >
         <section className="rounded-2xl border border-dashed border-slate-700 bg-slate-900 p-10 text-center">
           <h3 className="text-lg font-semibold">Import required</h3>
           <p className="mt-3 text-sm text-slate-400">
-            Upload a Genetec CSV and complete field mapping to run exit
+            Upload a Genetec fire exit CSV and complete field mapping to run
             compliance analysis.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -72,13 +77,13 @@ export function ExitComplianceReportContent() {
             </Link>
           </div>
         </section>
-      </ReportPageShell>
+      </SectionPageShell>
     );
   }
 
   const statCards = [
-    { label: "Total events", value: analysis.totalEvents, accent: "text-white" },
-    { label: "Unique doors", value: analysis.uniqueDoors, accent: "text-cyan-400" },
+    { label: "Total exit events", value: analysis.totalEvents, accent: "text-white" },
+    { label: "Fire exit doors", value: analysis.uniqueDoors, accent: "text-cyan-400" },
     {
       label: "Forced open",
       value: analysis.forcedOpenEvents,
@@ -90,14 +95,18 @@ export function ExitComplianceReportContent() {
       accent: "text-amber-400",
     },
     {
-      label: "Access denied",
-      value: analysis.accessDeniedEvents,
+      label: "Life safety exceptions",
+      value: analysis.lifeSafetyExceptions,
       accent: "text-orange-400",
     },
   ];
 
   return (
-    <ReportPageShell report={report}>
+    <SectionPageShell
+      eyebrow="Compliance"
+      title="Fire Exit Compliance"
+      description="Analyse held-open exit events, forced-open incidents, repeat issue doors and compliance scoring from imported Genetec data."
+    >
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
         <h3 className="text-lg font-semibold">Source import</h3>
         <p className="mt-2 text-sm text-slate-400">
@@ -122,12 +131,16 @@ export function ExitComplianceReportContent() {
       </section>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <h3 className="text-lg font-semibold">Top doors by activity</h3>
+        <h3 className="text-lg font-semibold">Repeat issue exit doors</h3>
+        <p className="mt-2 text-sm text-slate-400">
+          Exit doors with the highest volume of fire exit and life safety
+          events.
+        </p>
         <div className="mt-6 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-slate-700 text-slate-300">
               <tr>
-                <th className="px-4 py-3 font-medium">Door</th>
+                <th className="px-4 py-3 font-medium">Exit door</th>
                 <th className="px-4 py-3 font-medium">Events</th>
               </tr>
             </thead>
@@ -146,15 +159,14 @@ export function ExitComplianceReportContent() {
       </section>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <h3 className="text-lg font-semibold">Recent compliance exceptions</h3>
+        <h3 className="text-lg font-semibold">Recent life safety exceptions</h3>
         <p className="mt-2 text-sm text-slate-400">
-          Forced open, held open and access denied events detected in the
-          import.
+          Held-open and forced-open fire exit events requiring review.
         </p>
 
         {analysis.recentExceptions.length === 0 ? (
           <p className="mt-6 text-sm text-slate-400">
-            No compliance exceptions detected in this import.
+            No life safety exceptions detected in this import.
           </p>
         ) : (
           <div className="mt-6 overflow-x-auto">
@@ -163,8 +175,8 @@ export function ExitComplianceReportContent() {
                 <tr>
                   <th className="px-4 py-3 font-medium">Event time</th>
                   <th className="px-4 py-3 font-medium">Event type</th>
-                  <th className="px-4 py-3 font-medium">Door</th>
-                  <th className="px-4 py-3 font-medium">Access result</th>
+                  <th className="px-4 py-3 font-medium">Exit door</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -183,6 +195,6 @@ export function ExitComplianceReportContent() {
           </div>
         )}
       </section>
-    </ReportPageShell>
+    </SectionPageShell>
   );
 }
