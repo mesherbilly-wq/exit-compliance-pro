@@ -19,7 +19,7 @@ export default function DashboardPage() {
         <DashboardCard
           title="Door Compliance Reports"
           description="Check exits, doors, forced-open events, held-open events and compliance issues."
-          href="/reports"
+          href="/reports/exit-compliance"
         />
 
         <DashboardCard
@@ -31,7 +31,7 @@ export default function DashboardPage() {
         <DashboardCard
           title="Bespoke Attendance Reports"
           description="Create customer-specific reports such as daily attendance, visitor trends and occupancy."
-          href="/reports"
+          href="/reports/attendance"
         />
 
         <DashboardCard

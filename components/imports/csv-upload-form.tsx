@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Papa from "papaparse";
 import { useState } from "react";
-import { saveImport } from "@/lib/imports/storage";
+import { saveImport, saveImportData } from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 import { IMPORT_STATUS_LABELS } from "@/lib/imports/types";
 
@@ -43,6 +43,7 @@ export function CsvUploadForm() {
         };
 
         saveImport(record);
+        saveImportData(record.id, parsedRows);
         setImportRecord(record);
       },
     });
@@ -136,13 +137,12 @@ export function CsvUploadForm() {
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled
-            className="mt-8 cursor-not-allowed rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-500"
+          <Link
+            href="/imports/mapping"
+            className="mt-8 inline-block rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
           >
             Continue to Field Mapping
-          </button>
+          </Link>
         </section>
       )}
 

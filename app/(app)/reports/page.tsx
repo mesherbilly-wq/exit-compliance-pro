@@ -1,10 +1,5 @@
-import { PagePlaceholder } from "@/components/ui/page-placeholder";
+import { ReportsSuiteContent } from "@/components/reports/reports-suite-content";
 
 export default function ReportsPage() {
-  return (
-    <PagePlaceholder
-      title="Reports"
-      description="Generate door compliance reports, attendance summaries and exception event analysis."
-    />
-  );
+  return <ReportsSuiteContent />;
 }
