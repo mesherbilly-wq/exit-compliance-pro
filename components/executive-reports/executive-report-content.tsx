@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   buildExecutiveReport,
   type ExecutiveReport,
@@ -19,6 +19,12 @@ import {
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
+import {
+  TIME_BEYOND_THRESHOLD_LABEL,
+  TIME_BEYOND_THRESHOLD_TOOLTIP,
+} from "@/lib/analytics/labels";
+import { formatDurationLabel } from "@/lib/reports/held-open-detection";
+import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 
 const SITE_HEALTH_STYLES: Record<
   SiteHealthRating,
@@ -116,12 +122,18 @@ export function ExecutiveReportContent() {
   const [report, setReport] = useState<ExecutiveReport | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  const reloadReport = useCallback(() => {
     const data = loadExecutiveReport();
     setImportRecord(data.importRecord);
     setReport(data.report);
     setLoaded(true);
   }, []);
+
+  useEffect(() => {
+    reloadReport();
+  }, [reloadReport]);
+
+  useImportsRefreshed(reloadReport);
 
   if (!loaded) {
     return <p className="text-sm text-slate-400">Preparing executive report...</p>;
@@ -292,9 +304,9 @@ export function ExecutiveReportContent() {
               compact
             />
             <MetricTile
-              label="Total exposure time"
+              label={TIME_BEYOND_THRESHOLD_LABEL}
               value={report.totalExposureLabel}
-              detail="Portfolio held-open exposure beyond threshold"
+              detail={TIME_BEYOND_THRESHOLD_TOOLTIP}
               valueClass="text-2xl font-bold text-red-400"
             />
             <MetricTile
@@ -308,7 +320,7 @@ export function ExecutiveReportContent() {
           {report.complianceTrend.recentPeriods.length > 1 && (
             <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-                Weekly exposure trend
+                Weekly time beyond threshold trend
               </h2>
               <div className="mt-4 flex items-end gap-1 overflow-x-auto pb-2">
                 {report.complianceTrend.recentPeriods.map((point) => {
@@ -331,7 +343,7 @@ export function ExecutiveReportContent() {
                       <div
                         className="w-full rounded-t bg-gradient-to-t from-cyan-600 to-cyan-400"
                         style={{ height: `${height}px` }}
-                        title={`${point.label}: ${point.exposureSeconds}s exposure`}
+                        title={`${point.label}: ${formatDurationLabel(point.exposureSeconds)} beyond threshold`}
                       />
                       <span className="text-[10px] text-slate-500">
                         {point.label.replace(/^\d{4}-W/, "W")}
@@ -349,7 +361,7 @@ export function ExecutiveReportContent() {
                 Top 5 compliance risks
               </h2>
               <p className="mt-1 text-sm text-slate-400">
-                Highest priority fire exits by risk rating and exposure
+                Highest priority fire exits by risk rating and time beyond threshold
               </p>
 
               {report.topComplianceRisks.length === 0 ? (
@@ -423,7 +435,7 @@ export function ExecutiveReportContent() {
                         <p className="mt-1 text-sm text-slate-400">{item.summary}</p>
                         <p className="mt-1 text-xs text-slate-500">
                           {item.complianceScore}% compliance · {item.exposureLabel}{" "}
-                          exposure
+                          beyond threshold
                         </p>
                       </div>
                     </li>

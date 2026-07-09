@@ -1,15 +1,9 @@
 import type { CsvRow, FieldMapping } from "@/lib/imports/types";
 import { formatDurationLabel, formatDurationReadable } from "@/lib/reports/held-open-detection";
-import {
-  getRiskRating,
-  type RiskRating,
-} from "./door-intelligence-view";
-import { parseFireExitEvents } from "./parse-events";
-import type {
-  FireExitIntelligenceReport,
-  HeldOpenSession,
-  ParsedFireExitEvent,
-} from "./types";
+import { TIME_BEYOND_THRESHOLD_LABEL } from "@/lib/analytics/labels";
+import { normalizeIntelligenceReport } from "./normalize-intelligence";
+import { getRiskRating } from "./door-intelligence-view";
+import type { ComplianceIncident, FireExitIntelligenceReport, RiskRating } from "./types";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -38,7 +32,7 @@ export type HeatMapGrid = {
   rowLabels: string[];
   colLabels: string[];
   cells: HeatMapCell[][];
-  valueUnit: "events" | "sessions" | "seconds" | "score";
+  valueUnit: "incidents" | "sessions" | "seconds" | "score";
   maxValue: number;
 };
 
@@ -58,13 +52,13 @@ export type HeatMapDashboard = {
   doorActivity: HeatMapGrid;
   exposureTime: HeatMapGrid;
   highRiskDoors: HeatMapGrid;
-  totalEvents: number;
+  totalIncidents: number;
   totalSessions: number;
+  doorsWithIncidents: number;
   totalExposureSeconds: number;
 };
 
-type EnrichedEvent = ParsedFireExitEvent & { building: string };
-type EnrichedSession = HeldOpenSession & { building: string };
+type EnrichedIncident = ComplianceIncident & { building: string };
 
 function dateKey(timestamp: number): string {
   const date = new Date(timestamp);
@@ -116,30 +110,20 @@ function buildDoorRiskMap(
   return map;
 }
 
-function enrichEvents(
-  events: ParsedFireExitEvent[],
-  doorBuildingMap: Map<string, string>,
-): EnrichedEvent[] {
-  return events.map((event) => ({
-    ...event,
-    building: doorBuildingMap.get(event.door) ?? "Unassigned",
-  }));
-}
-
-function enrichSessions(
+function enrichIncidents(
   report: FireExitIntelligenceReport,
   doorBuildingMap: Map<string, string>,
-): EnrichedSession[] {
-  const sessions: EnrichedSession[] = [];
+): EnrichedIncident[] {
+  const incidents: EnrichedIncident[] = [];
 
-  for (const profile of report.doors) {
+  for (const profile of normalizeIntelligenceReport(report).doors) {
     const building = doorBuildingMap.get(profile.door) ?? "Unassigned";
-    for (const session of profile.sessions) {
-      sessions.push({ ...session, building });
+    for (const incident of profile.incidents) {
+      incidents.push({ ...incident, building });
     }
   }
 
-  return sessions;
+  return incidents;
 }
 
 function passesDateFilter(
@@ -159,50 +143,27 @@ function passesDateFilter(
   return true;
 }
 
-function passesEventFilters(
-  event: EnrichedEvent,
+function passesIncidentFilters(
+  incident: EnrichedIncident,
   filters: HeatMapFilterState,
   doorRiskMap: Map<string, RiskRating>,
 ): boolean {
-  if (filters.door !== "All" && event.door !== filters.door) {
+  if (filters.door !== "All" && incident.door !== filters.door) {
     return false;
   }
 
-  if (filters.building !== "All" && event.building !== filters.building) {
+  if (filters.building !== "All" && incident.building !== filters.building) {
     return false;
   }
 
   if (
     filters.riskLevel !== "All" &&
-    doorRiskMap.get(event.door) !== filters.riskLevel
+    doorRiskMap.get(incident.door) !== filters.riskLevel
   ) {
     return false;
   }
 
-  return passesDateFilter(event.timestamp, filters);
-}
-
-function passesSessionFilters(
-  session: EnrichedSession,
-  filters: HeatMapFilterState,
-  doorRiskMap: Map<string, RiskRating>,
-): boolean {
-  if (filters.door !== "All" && session.door !== filters.door) {
-    return false;
-  }
-
-  if (filters.building !== "All" && session.building !== filters.building) {
-    return false;
-  }
-
-  if (
-    filters.riskLevel !== "All" &&
-    doorRiskMap.get(session.door) !== filters.riskLevel
-  ) {
-    return false;
-  }
-
-  return passesDateFilter(session.startTimestamp, filters);
+  return passesDateFilter(incident.startTimestamp, filters);
 }
 
 function normalizeIntensity(value: number, maxValue: number): number {
@@ -279,18 +240,23 @@ function buildSingleRowGrid(
 }
 
 function getFilterOptions(
-  events: EnrichedEvent[],
+  incidents: EnrichedIncident[],
   doorBuildingMap: Map<string, string>,
   doorRiskMap: Map<string, RiskRating>,
 ): HeatMapFilterOptions {
-  const doors = [...new Set(events.map((event) => event.door))].sort((a, b) =>
-    a.localeCompare(b),
+  const doors = [...new Set(incidents.map((incident) => incident.door))].sort(
+    (a, b) => a.localeCompare(b),
   );
   const buildings = [
-    ...new Set([...doorBuildingMap.values(), ...events.map((e) => e.building)]),
+    ...new Set([
+      ...doorBuildingMap.values(),
+      ...incidents.map((incident) => incident.building),
+    ]),
   ].sort((a, b) => a.localeCompare(b));
 
-  const dates = events.map((event) => dateKey(event.timestamp)).sort();
+  const dates = incidents
+    .map((incident) => dateKey(incident.startTimestamp))
+    .sort();
   const riskLevels = [...new Set(doorRiskMap.values())].sort((a, b) => {
     const order: Record<RiskRating, number> = {
       Low: 1,
@@ -312,12 +278,11 @@ function getFilterOptions(
   };
 }
 
-function buildHourOfDayGrid(events: EnrichedEvent[]): HeatMapGrid {
+function buildHourOfDayGrid(incidents: EnrichedIncident[]): HeatMapGrid {
   const values = Array.from({ length: 24 }, () => 0);
 
-  for (const event of events) {
-    const hour = new Date(event.timestamp).getHours();
-    values[hour] += 1;
+  for (const incident of incidents) {
+    values[incident.hourStarted] += 1;
   }
 
   const labels = values.map((_, hour) => `${String(hour).padStart(2, "0")}:00`);
@@ -325,84 +290,91 @@ function buildHourOfDayGrid(events: EnrichedEvent[]): HeatMapGrid {
   return buildSingleRowGrid(
     "hour-of-day",
     "Hour of day heat map",
-    "Fire exit event volume by hour. Darker cells indicate busier periods.",
+    "Compliance incidents by the hour each incident started. Reminder events merged into one incident.",
     labels,
     values,
-    "events",
-    (value) => `${value.toLocaleString()} events`,
+    "incidents",
+    (value) => `${value.toLocaleString()} incident${value === 1 ? "" : "s"}`,
   );
 }
 
-function buildDayOfWeekGrid(events: EnrichedEvent[]): HeatMapGrid {
+function buildDayOfWeekGrid(incidents: EnrichedIncident[]): HeatMapGrid {
   const values = Array.from({ length: 7 }, () => 0);
 
-  for (const event of events) {
-    const day = new Date(event.timestamp).getDay();
-    values[day] += 1;
+  for (const incident of incidents) {
+    const dayIndex = DAY_LABELS.indexOf(incident.dayStarted);
+    if (dayIndex === -1) {
+      continue;
+    }
+
+    values[dayIndex] += 1;
   }
 
   return buildSingleRowGrid(
     "day-of-week",
     "Day of week heat map",
-    "Fire exit event volume by weekday. Darker cells indicate busier days.",
+    "Compliance incidents by weekday based on incident start day.",
     DAY_LABELS,
     values,
-    "events",
-    (value) => `${value.toLocaleString()} events`,
+    "incidents",
+    (value) => `${value.toLocaleString()} incident${value === 1 ? "" : "s"}`,
   );
 }
 
-function buildDoorActivityGrid(events: EnrichedEvent[]): HeatMapGrid {
-  const doors = [...new Set(events.map((event) => event.door))].sort((a, b) =>
-    a.localeCompare(b),
+function buildDoorActivityGrid(incidents: EnrichedIncident[]): HeatMapGrid {
+  const doors = [...new Set(incidents.map((incident) => incident.door))].sort(
+    (a, b) => a.localeCompare(b),
   );
   const colLabels = Array.from({ length: 24 }, (_, hour) =>
     `${String(hour).padStart(2, "0")}:00`,
   );
   const values = doors.map(() => Array.from({ length: 24 }, () => 0));
 
-  for (const event of events) {
-    const rowIndex = doors.indexOf(event.door);
+  for (const incident of incidents) {
+    const rowIndex = doors.indexOf(incident.door);
     if (rowIndex === -1) {
       continue;
     }
 
-    const hour = new Date(event.timestamp).getHours();
-    values[rowIndex][hour] += 1;
+    values[rowIndex][incident.hourStarted] += 1;
   }
 
   return buildMatrixGrid(
     "door-activity",
     "Door activity heat map",
-    "Event counts per door and hour. Rows are doors, columns are hours of day.",
+    "Incident counts per door and incident start hour. Rows are doors, columns are hours of day.",
     doors,
     colLabels,
     values,
-    "events",
-    (value) => `${value.toLocaleString()} events`,
+    "incidents",
+    (value) => `${value.toLocaleString()} incident${value === 1 ? "" : "s"}`,
   );
 }
 
-function buildExposureTimeGrid(sessions: EnrichedSession[]): HeatMapGrid {
-  const doors = [...new Set(sessions.map((session) => session.door))].sort(
+function buildExposureTimeGrid(incidents: EnrichedIncident[]): HeatMapGrid {
+  const doors = [...new Set(incidents.map((incident) => incident.door))].sort(
     (a, b) => a.localeCompare(b),
   );
   const values = doors.map(() => Array.from({ length: 7 }, () => 0));
 
-  for (const session of sessions) {
-    const rowIndex = doors.indexOf(session.door);
+  for (const incident of incidents) {
+    const rowIndex = doors.indexOf(incident.door);
     if (rowIndex === -1) {
       continue;
     }
 
-    const day = new Date(session.startTimestamp).getDay();
-    values[rowIndex][day] += session.exposureSeconds;
+    const dayIndex = DAY_LABELS.indexOf(incident.dayStarted);
+    if (dayIndex === -1) {
+      continue;
+    }
+
+    values[rowIndex][dayIndex] += incident.timeBeyondThresholdSeconds;
   }
 
   return buildMatrixGrid(
     "exposure-time",
-    "Exposure time heat map",
-    "Held-open exposure seconds per door and weekday from session analytics.",
+    `${TIME_BEYOND_THRESHOLD_LABEL} heat map`,
+    "Time beyond threshold per door and weekday from session analytics.",
     doors,
     DAY_LABELS,
     values,
@@ -412,13 +384,13 @@ function buildExposureTimeGrid(sessions: EnrichedSession[]): HeatMapGrid {
 }
 
 function buildHighRiskDoorGrid(
-  sessions: EnrichedSession[],
+  incidents: EnrichedIncident[],
   doorRiskMap: Map<string, RiskRating>,
 ): HeatMapGrid {
   const highRiskDoors = [
     ...new Set(
-      sessions
-        .map((session) => session.door)
+      incidents
+        .map((incident) => incident.door)
         .filter((door) => {
           const risk = doorRiskMap.get(door);
           return risk === "High" || risk === "Critical";
@@ -431,25 +403,25 @@ function buildHighRiskDoorGrid(
   );
   const values = highRiskDoors.map(() => Array.from({ length: 24 }, () => 0));
 
-  for (const session of sessions) {
-    const risk = doorRiskMap.get(session.door);
+  for (const incident of incidents) {
+    const risk = doorRiskMap.get(incident.door);
     if (risk !== "High" && risk !== "Critical") {
       continue;
     }
 
-    const rowIndex = highRiskDoors.indexOf(session.door);
+    const rowIndex = highRiskDoors.indexOf(incident.door);
     if (rowIndex === -1) {
       continue;
     }
 
-    const hour = new Date(session.startTimestamp).getHours();
-    values[rowIndex][hour] += session.exposureSeconds;
+    values[rowIndex][incident.hourStarted] +=
+      incident.timeBeyondThresholdSeconds;
   }
 
   return buildMatrixGrid(
     "high-risk-doors",
     "High risk door heat map",
-    "Exposure intensity for High and Critical risk doors by hour of day.",
+    "Time beyond threshold for High and Critical risk doors by hour of day.",
     highRiskDoors.length > 0 ? highRiskDoors : ["No high risk doors"],
     colLabels,
     highRiskDoors.length > 0
@@ -471,38 +443,39 @@ export const DEFAULT_HEAT_MAP_FILTERS: HeatMapFilterState = {
 export function buildHeatMapDashboard(
   report: FireExitIntelligenceReport,
   rows: CsvRow[],
-  headers: string[],
+  _headers: string[],
   filters: HeatMapFilterState = DEFAULT_HEAT_MAP_FILTERS,
 ): HeatMapDashboard {
-  const doorBuildingMap = buildDoorBuildingMap(rows, report.mapping);
-  const doorRiskMap = buildDoorRiskMap(report);
-  const { events } = parseFireExitEvents(rows, report.mapping, headers);
+  const normalizedReport = normalizeIntelligenceReport(report);
+  const doorBuildingMap = buildDoorBuildingMap(rows, normalizedReport.mapping);
+  const doorRiskMap = buildDoorRiskMap(normalizedReport);
+  const allIncidents = enrichIncidents(normalizedReport, doorBuildingMap);
 
-  const allEvents = enrichEvents(events, doorBuildingMap);
-  const allSessions = enrichSessions(report, doorBuildingMap);
-
-  const filteredEvents = allEvents.filter((event) =>
-    passesEventFilters(event, filters, doorRiskMap),
-  );
-  const filteredSessions = allSessions.filter((session) =>
-    passesSessionFilters(session, filters, doorRiskMap),
+  const filteredIncidents = allIncidents.filter((incident) =>
+    passesIncidentFilters(incident, filters, doorRiskMap),
   );
 
-  const filterOptions = getFilterOptions(allEvents, doorBuildingMap, doorRiskMap);
+  const filterOptions = getFilterOptions(
+    allIncidents,
+    doorBuildingMap,
+    doorRiskMap,
+  );
 
   return {
-    sourceFileName: report.sourceFileName,
+    sourceFileName: normalizedReport.sourceFileName,
     filters,
     filterOptions,
-    hourOfDay: buildHourOfDayGrid(filteredEvents),
-    dayOfWeek: buildDayOfWeekGrid(filteredEvents),
-    doorActivity: buildDoorActivityGrid(filteredEvents),
-    exposureTime: buildExposureTimeGrid(filteredSessions),
-    highRiskDoors: buildHighRiskDoorGrid(filteredSessions, doorRiskMap),
-    totalEvents: filteredEvents.length,
-    totalSessions: filteredSessions.length,
-    totalExposureSeconds: filteredSessions.reduce(
-      (sum, session) => sum + session.exposureSeconds,
+    hourOfDay: buildHourOfDayGrid(filteredIncidents),
+    dayOfWeek: buildDayOfWeekGrid(filteredIncidents),
+    doorActivity: buildDoorActivityGrid(filteredIncidents),
+    exposureTime: buildExposureTimeGrid(filteredIncidents),
+    highRiskDoors: buildHighRiskDoorGrid(filteredIncidents, doorRiskMap),
+    totalIncidents: filteredIncidents.length,
+    totalSessions: filteredIncidents.length,
+    doorsWithIncidents: new Set(filteredIncidents.map((incident) => incident.door))
+      .size,
+    totalExposureSeconds: filteredIncidents.reduce(
+      (sum, incident) => sum + incident.timeBeyondThresholdSeconds,
       0,
     ),
   };

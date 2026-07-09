@@ -1,6 +1,7 @@
-import type { DoorIntelligenceProfile, TrendPoint } from "./types";
+import type { DoorIntelligenceProfile, RiskRating, TrendPoint } from "./types";
+import { getDoorIncidents } from "./normalize-intelligence";
 
-export type RiskRating = "Low" | "Medium" | "High" | "Critical";
+export type { RiskRating } from "./types";
 
 export type TrendDirection = "Improving" | "Deteriorating" | "Stable" | "N/A";
 
@@ -53,7 +54,7 @@ const TREND_ORDER: Record<TrendDirection, number> = {
 };
 
 export function getRiskRating(profile: DoorIntelligenceProfile): RiskRating {
-  if (profile.totalHeldOpenEvents === 0) {
+  if ((profile.totalIncidents ?? profile.totalHeldOpenEvents ?? 0) === 0) {
     return "Low";
   }
 
@@ -123,7 +124,8 @@ export function toDoorIntelligenceRow(
   profile: DoorIntelligenceProfile,
 ): DoorIntelligenceRow {
   const { trend, trendScore } = getTrendDirection(profile.weeklyTrend);
-  const lastSession = profile.sessions[profile.sessions.length - 1];
+  const incidents = getDoorIncidents(profile);
+  const lastIncident = incidents[incidents.length - 1];
 
   return {
     door: profile.door,
@@ -135,10 +137,10 @@ export function toDoorIntelligenceRow(
     averageHeldOpenDurationLabel: profile.averageHeldOpenDurationLabel,
     longestHeldOpenDurationSeconds: profile.longestHeldOpenDurationSeconds,
     longestHeldOpenDurationLabel: profile.longestHeldOpenDurationLabel,
-    occurrences: profile.totalHeldOpenEvents,
+    occurrences: profile.totalIncidents ?? profile.totalHeldOpenEvents ?? incidents.length,
     daysAffected: profile.daysAffected,
     lastIncident: profile.lastOccurrence,
-    lastIncidentTimestamp: lastSession?.startTimestamp ?? null,
+    lastIncidentTimestamp: lastIncident?.startTimestamp ?? null,
     trend,
     trendScore,
     status: profile.status,

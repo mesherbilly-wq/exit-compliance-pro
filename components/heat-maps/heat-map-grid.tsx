@@ -21,6 +21,10 @@ function formatCellValue(
     return compact ? formatDurationLabel(value) : formatDurationReadable(value);
   }
 
+  if (valueUnit === "incidents") {
+    return value.toLocaleString();
+  }
+
   return value.toLocaleString();
 }
 

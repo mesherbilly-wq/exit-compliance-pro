@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toFireExitDashboardAnalysis } from "@/lib/analytics/report-adapters";
 import {
   analyzeFireExitDashboard,
@@ -18,6 +18,11 @@ import {
 } from "@/lib/imports/storage";
 import type { FieldMapping, ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
+import {
+  TIME_BEYOND_THRESHOLD_LABEL,
+  TIME_BEYOND_THRESHOLD_TOOLTIP,
+} from "@/lib/analytics/labels";
+import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 
 const STATUS_STYLES: Record<DoorComplianceStatus, string> = {
   Compliant: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -30,15 +35,23 @@ export function FireExitDashboardContent() {
   const [mapping, setMapping] = useState<FieldMapping | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  const reloadImportState = useCallback(() => {
     const latest = getLatestImport();
     const rows = getLatestImportData();
     setImportRecord(latest);
     setMapping(
-      latest ? resolveFieldMapping(latest.headers, rows, getFieldMapping(latest.id)) : null,
+      latest
+        ? resolveFieldMapping(latest.headers, rows, getFieldMapping(latest.id))
+        : null,
     );
     setLoaded(true);
   }, []);
+
+  useEffect(() => {
+    reloadImportState();
+  }, [reloadImportState]);
+
+  useImportsRefreshed(reloadImportState);
 
   const rows = useMemo(() => getLatestImportData(), [loaded, importRecord]);
 
@@ -123,9 +136,10 @@ export function FireExitDashboardContent() {
       accent: "text-amber-400",
     },
     {
-      label: "Total Exposure Time",
+      label: TIME_BEYOND_THRESHOLD_LABEL,
       value: analysis.totalExposureLabel ?? "N/A",
       accent: "text-red-400",
+      title: TIME_BEYOND_THRESHOLD_TOOLTIP,
     },
     {
       label: "Average Violation Duration",
@@ -176,7 +190,9 @@ export function FireExitDashboardContent() {
             key={card.label}
             className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
           >
-            <p className="text-sm text-slate-400">{card.label}</p>
+            <p className="text-sm text-slate-400" title={"title" in card ? card.title : undefined}>
+              {card.label}
+            </p>
             <p
               className={`mt-2 font-bold ${card.accent} ${
                 card.small ? "text-lg" : "text-3xl"

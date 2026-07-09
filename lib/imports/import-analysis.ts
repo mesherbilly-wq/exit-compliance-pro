@@ -1,12 +1,18 @@
 import type { FieldMapping, ImportAnalysisSnapshot } from "./types";
 import { resolveFieldMapping } from "./resolve-mapping";
 import {
-  runFireExitIntelligenceEngine,
+  runFireExitIntelligenceWithArtifacts,
+  refreshIntelligenceReportWithConfig,
 } from "@/lib/analytics/fire-exit-intelligence-engine";
+import { getAnalyticsConfig } from "@/lib/analytics/config";
 import { toDoorHealthAnalysis } from "@/lib/analytics/report-adapters";
 import type { DoorHealthAnalysis } from "@/lib/reports/analyze-door-health";
 import type { CsvRow } from "./types";
-import type { FireExitIntelligenceReport } from "@/lib/analytics/types";
+import type {
+  FireExitIntelligenceReport,
+  ParsedFireExitEvent,
+} from "@/lib/analytics/types";
+import { normalizeIntelligenceReport } from "@/lib/analytics/normalize-intelligence";
 
 export function buildImportAnalysis(
   headers: string[],
@@ -14,22 +20,56 @@ export function buildImportAnalysis(
   fileName: string,
   savedMapping?: FieldMapping | null,
 ): ImportAnalysisSnapshot {
-  const report = runFireExitIntelligenceEngine(rows, headers, {
+  const artifacts = runFireExitIntelligenceWithArtifacts(rows, headers, {
     sourceFileName: fileName,
     savedMapping,
   });
 
-  return toImportAnalysisSnapshot(report, rows.length);
+  return toImportAnalysisSnapshot(
+    artifacts.report,
+    rows.length,
+    artifacts.parsedEvents,
+    artifacts.hasDurationField,
+  );
 }
 
 export function toImportAnalysisSnapshot(
   report: FireExitIntelligenceReport,
   analyzedRowCount: number,
+  parsedEvents?: ParsedFireExitEvent[],
+  hasDurationField?: boolean,
 ): ImportAnalysisSnapshot {
   return {
     mapping: report.mapping,
     analyzedRowCount,
     intelligence: report,
+    parsedEvents,
+    hasDurationField,
+  };
+}
+
+export function rebuildImportAnalysisWithCurrentConfig(
+  snapshot: ImportAnalysisSnapshot,
+  headers: string[],
+  fileName: string,
+): ImportAnalysisSnapshot | null {
+  const refreshed = refreshIntelligenceReportWithConfig(
+    snapshot,
+    headers,
+    fileName,
+    getAnalyticsConfig(),
+  );
+
+  if (!refreshed) {
+    return null;
+  }
+
+  return {
+    mapping: refreshed.report.mapping,
+    analyzedRowCount: snapshot.analyzedRowCount,
+    intelligence: refreshed.report,
+    parsedEvents: refreshed.parsedEvents,
+    hasDurationField: refreshed.hasDurationField,
   };
 }
 
@@ -46,7 +86,11 @@ export function doorHealthFromSnapshot(
 export function intelligenceFromSnapshot(
   snapshot: ImportAnalysisSnapshot,
 ): FireExitIntelligenceReport | null {
-  return snapshot.intelligence ?? null;
+  if (!snapshot.intelligence) {
+    return null;
+  }
+
+  return normalizeIntelligenceReport(snapshot.intelligence);
 }
 
 export function isFullImportAnalysis(
@@ -56,4 +100,8 @@ export function isFullImportAnalysis(
     !!record.analysisSnapshot &&
     record.analysisSnapshot.analyzedRowCount >= record.rowCount
   );
+}
+
+export function snapshotHasReplayEvents(snapshot: ImportAnalysisSnapshot): boolean {
+  return Array.isArray(snapshot.parsedEvents) && snapshot.parsedEvents.length > 0;
 }

@@ -17,7 +17,6 @@ export {
 export type {
   DoorIntelligenceRow,
   DoorIntelligenceSortKey,
-  RiskRating,
   TrendDirection,
 } from "./door-intelligence-view";
 export {
@@ -30,6 +29,11 @@ export {
   DEFAULT_ANALYTICS_CONFIG,
   DEFAULT_HELD_OPEN_THRESHOLD_SECONDS,
 } from "./config";
+export {
+  buildComplianceIncidents,
+  getIncidentDurationBucket,
+  getIncidentRiskRating,
+} from "./compliance-incidents";
 export type {
   FireExitIntelligenceReport,
   FireExitAnalyticsConfig,
@@ -37,8 +41,12 @@ export type {
   FireExitPortfolioSummary,
   DistributionBucket,
   TrendPoint,
+  ComplianceIncident,
+  IncidentDurationBucket,
   HeldOpenSession,
+  RiskRating,
 } from "./types";
+export { toHeldOpenSession } from "./types";
 export {
   toDoorHealthAnalysis,
   toFireExitDashboardAnalysis,

@@ -185,8 +185,8 @@ export function CsvUploadForm() {
           <h3 className="text-2xl font-semibold">CSV Preview</h3>
           <p className="mt-2 text-sm text-slate-400">
             Showing {Math.min(rows.length, 10)} of {importRecord.rowCount}{" "}
-            rows. Only the first {PREVIEW_ROW_LIMIT} rows are stored in browser
-            storage for preview and analysis.
+            rows. Full-file analysis is stored at upload; only a preview subset
+            is kept in browser storage for display.
           </p>
 
           <div className="mt-6 overflow-x-auto">

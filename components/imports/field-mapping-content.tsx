@@ -11,12 +11,17 @@ import {
   getFieldMapping,
   getLatestImport,
   getLatestImportData,
+  saveFieldMapping,
   saveImportAnalysisSnapshot,
   updateImportStatus,
 } from "@/lib/imports/storage";
-import { buildImportAnalysis } from "@/lib/imports/import-analysis";
+import {
+  buildImportAnalysis,
+  snapshotHasReplayEvents,
+} from "@/lib/imports/import-analysis";
 import {
   GENETEC_FIELDS,
+  isPreviewOnlyAnalysis,
   type FieldMapping,
   type ImportRecord,
 } from "@/lib/imports/types";
@@ -40,6 +45,12 @@ export function FieldMappingContent() {
     const initial = resolveFieldMapping(latest.headers, rows, getFieldMapping(latest.id));
 
     setMapping(initial);
+
+    const existingSnapshot = latest.analysisSnapshot;
+    if (existingSnapshot && !isPreviewOnlyAnalysis(latest)) {
+      setLoaded(true);
+      return;
+    }
 
     const snapshot = buildImportAnalysis(
       latest.headers,
@@ -72,15 +83,28 @@ export function FieldMappingContent() {
     const updated = { ...mapping, [fieldKey]: value };
     setMapping(updated);
 
-    const rows = getLatestImportData();
-    const snapshot = buildImportAnalysis(
-      importRecord.headers,
-      rows,
-      importRecord.fileName,
-      updated,
-    );
+    const existingSnapshot = importRecord.analysisSnapshot;
+    if (
+      existingSnapshot &&
+      !isPreviewOnlyAnalysis(importRecord) &&
+      snapshotHasReplayEvents(existingSnapshot)
+    ) {
+      saveFieldMapping(importRecord.id, updated);
+      saveImportAnalysisSnapshot(importRecord.id, {
+        ...existingSnapshot,
+        mapping: updated,
+      });
+    } else {
+      const rows = getLatestImportData();
+      const snapshot = buildImportAnalysis(
+        importRecord.headers,
+        rows,
+        importRecord.fileName,
+        updated,
+      );
 
-    saveImportAnalysisSnapshot(importRecord.id, snapshot);
+      saveImportAnalysisSnapshot(importRecord.id, snapshot);
+    }
 
     updateImportStatus(
       importRecord.id,

@@ -10,6 +10,7 @@ import {
   getTopDeterioratingDoors,
   type RiskRating,
 } from "./door-intelligence-view";
+import { getDoorIncidents, normalizeIntelligenceReport } from "./normalize-intelligence";
 import { formatDurationLabel } from "@/lib/reports/held-open-detection";
 
 export type ComplianceRecommendation = {
@@ -187,7 +188,7 @@ function generateRecommendations(
     add({
       id: "highest-risk",
       priority: "high",
-      message: `Prioritise review of ${highestRisk.door} — highest portfolio risk with ${highestRisk.totalExposureLabel} exposure.`,
+      message: `Prioritise review of ${highestRisk.door} — highest portfolio risk with ${highestRisk.totalExposureLabel} time beyond threshold.`,
       door: highestRisk.door,
     });
   }
@@ -254,14 +255,15 @@ function generateRecommendations(
 export function buildComplianceIntelligenceDashboard(
   report: FireExitIntelligenceReport,
 ): ComplianceIntelligenceDashboard {
-  const rows = buildDoorIntelligenceRows(report.doors);
-  const summary = report.summary;
+  const normalized = normalizeIntelligenceReport(report);
+  const rows = buildDoorIntelligenceRows(normalized.doors);
+  const summary = normalized.summary;
 
-  const healthyDoors = report.doors.filter(
+  const healthyDoors = normalized.doors.filter(
     (door) => door.status === "Excellent" || door.status === "Good",
   ).length;
 
-  const doorsRequiringAttention = report.doors.filter(
+  const doorsRequiringAttention = normalized.doors.filter(
     (door) => door.status === "Needs Attention",
   ).length;
 
@@ -273,10 +275,10 @@ export function buildComplianceIntelligenceDashboard(
   let longestSingleIncidentSeconds = 0;
   let longestSingleIncidentDoor = "N/A";
 
-  for (const door of report.doors) {
-    for (const session of door.sessions) {
-      if (session.durationSeconds > longestSingleIncidentSeconds) {
-        longestSingleIncidentSeconds = session.durationSeconds;
+  for (const door of normalized.doors) {
+    for (const incident of getDoorIncidents(door)) {
+      if (incident.durationSeconds > longestSingleIncidentSeconds) {
+        longestSingleIncidentSeconds = incident.durationSeconds;
         longestSingleIncidentDoor = door.door;
       }
     }
@@ -285,11 +287,11 @@ export function buildComplianceIntelligenceDashboard(
   const mostImproved = getTopImprovingDoors(rows, 1)[0]?.door ?? "N/A";
   const highestRisk = getTopHighestRiskDoors(rows, 1)[0]?.door ?? summary.worstDoor;
 
-  const timeBuckets = aggregateDistribution(report.doors, "timeOfDayDistribution");
-  const dayBuckets = aggregateDistribution(report.doors, "dayOfWeekDistribution");
+  const timeBuckets = aggregateDistribution(normalized.doors, "timeOfDayDistribution");
+  const dayBuckets = aggregateDistribution(normalized.doors, "dayOfWeekDistribution");
 
   return {
-    sourceFileName: report.sourceFileName,
+    sourceFileName: normalized.sourceFileName,
     overallComplianceScore: summary.overallComplianceScore,
     riskLevel: getPortfolioRiskLevel(
       summary.overallComplianceScore,
@@ -311,7 +313,7 @@ export function buildComplianceIntelligenceDashboard(
     highestRiskDoor: highestRisk,
     mostCommonTimeOfDay: getMostCommonBucket(timeBuckets),
     mostCommonDayOfWeek: getMostCommonBucket(dayBuckets),
-    recommendations: generateRecommendations(report),
-    intelligence: report,
+    recommendations: generateRecommendations(normalized),
+    intelligence: normalized,
   };
 }

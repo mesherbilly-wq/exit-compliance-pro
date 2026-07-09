@@ -3,7 +3,7 @@ import {
   getDoorHealthStatus,
 } from "@/lib/reports/held-open-detection";
 import { formatEventTimeLabel } from "@/lib/reports/door-event-analysis";
-import type { DoorIntelligenceProfile, HeldOpenSession } from "./types";
+import type { ComplianceIncident, DoorIntelligenceProfile } from "./types";
 import {
   average,
   buildDayOfWeekDistribution,
@@ -39,31 +39,32 @@ export function calculateExposureComplianceScore(
 export function buildDoorIntelligenceProfile(
   door: string,
   totalFireExitEvents: number,
-  sessions: HeldOpenSession[],
+  incidents: ComplianceIncident[],
 ): DoorIntelligenceProfile {
-  const durations = sessions.map((session) => session.durationSeconds);
-  const exposureTotal = sessions.reduce(
-    (sum, session) => sum + session.exposureSeconds,
+  const durations = incidents.map((incident) => incident.durationSeconds);
+  const exposureTotal = incidents.reduce(
+    (sum, incident) => sum + incident.timeBeyondThresholdSeconds,
     0,
   );
   const averageDuration = average(durations);
   const longestDuration = durations.length > 0 ? Math.max(...durations) : null;
-  const repeatOccurrences = countRepeatOccurrences(sessions);
+  const repeatOccurrences = countRepeatOccurrences(incidents);
   const complianceScore = calculateExposureComplianceScore(
     exposureTotal,
-    sessions.length,
+    incidents.length,
     repeatOccurrences,
     totalFireExitEvents,
   );
 
-  const sortedSessions = [...sessions].sort(
+  const sortedIncidents = [...incidents].sort(
     (a, b) => a.startTimestamp - b.startTimestamp,
   );
 
   return {
     door,
     totalFireExitEvents,
-    totalHeldOpenEvents: sessions.length,
+    totalIncidents: incidents.length,
+    totalHeldOpenEvents: incidents.length,
     totalExposureSeconds: exposureTotal,
     totalExposureLabel: formatDurationLabel(exposureTotal),
     averageHeldOpenDurationSeconds: averageDuration,
@@ -71,21 +72,22 @@ export function buildDoorIntelligenceProfile(
     longestHeldOpenDurationSeconds: longestDuration,
     longestHeldOpenDurationLabel: formatDurationLabel(longestDuration),
     repeatOccurrences,
-    daysAffected: countDaysAffected(sessions),
-    firstOccurrence: sortedSessions[0]
-      ? formatEventTimeLabel(sortedSessions[0].startTimeLabel)
+    daysAffected: countDaysAffected(incidents),
+    firstOccurrence: sortedIncidents[0]
+      ? formatEventTimeLabel(sortedIncidents[0].startTimeLabel)
       : "N/A",
-    lastOccurrence: sortedSessions[sortedSessions.length - 1]
+    lastOccurrence: sortedIncidents[sortedIncidents.length - 1]
       ? formatEventTimeLabel(
-          sortedSessions[sortedSessions.length - 1].startTimeLabel,
+          sortedIncidents[sortedIncidents.length - 1].startTimeLabel,
         )
       : "N/A",
-    timeOfDayDistribution: buildTimeOfDayDistribution(sessions),
-    dayOfWeekDistribution: buildDayOfWeekDistribution(sessions),
-    weeklyTrend: buildWeeklyTrend(sessions),
-    monthlyTrend: buildMonthlyTrend(sessions),
+    timeOfDayDistribution: buildTimeOfDayDistribution(incidents),
+    dayOfWeekDistribution: buildDayOfWeekDistribution(incidents),
+    weeklyTrend: buildWeeklyTrend(incidents),
+    monthlyTrend: buildMonthlyTrend(incidents),
     complianceScore,
     status: getDoorHealthStatus(complianceScore),
-    sessions,
+    incidents,
+    sessions: incidents,
   };
 }

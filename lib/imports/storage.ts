@@ -9,11 +9,15 @@ import {
 import {
   fixHeaderlessCsvParse,
   looksLikeHeaderlessExport,
+  resolveFieldMapping,
 } from "./resolve-mapping";
 import {
   buildImportAnalysis,
   isFullImportAnalysis,
+  rebuildImportAnalysisWithCurrentConfig,
+  snapshotHasReplayEvents,
 } from "./import-analysis";
+import { canRunFireExitIntelligence } from "@/lib/analytics/fire-exit-intelligence-engine";
 
 const STORAGE_KEY = "exit-compliance-pro:recent-imports";
 const MAPPING_STORAGE_KEY = "exit-compliance-pro:field-mappings";
@@ -360,6 +364,91 @@ function getStoredMappings(): StoredMappings {
   } catch {
     return {};
   }
+}
+
+export type RefreshImportAnalysisResult = {
+  refreshed: number;
+  skipped: number;
+  previewFallback: number;
+};
+
+export function refreshAllImportAnalysisSnapshots(): RefreshImportAnalysisResult {
+  if (typeof window === "undefined") {
+    return { refreshed: 0, skipped: 0, previewFallback: 0 };
+  }
+
+  let refreshed = 0;
+  let skipped = 0;
+  let previewFallback = 0;
+  const imports = getRecentImports();
+
+  const updated = imports.map((record) => {
+    const existingSnapshot = record.analysisSnapshot;
+    if (!existingSnapshot) {
+      skipped += 1;
+      return record;
+    }
+
+    const savedMapping =
+      existingSnapshot.mapping ?? getFieldMapping(record.id);
+
+    if (snapshotHasReplayEvents(existingSnapshot)) {
+      const rebuilt = rebuildImportAnalysisWithCurrentConfig(
+        existingSnapshot,
+        record.headers,
+        record.fileName,
+      );
+
+      if (!rebuilt) {
+        skipped += 1;
+        return record;
+      }
+
+      refreshed += 1;
+      return {
+        ...record,
+        analysisSnapshot: rebuilt,
+      };
+    }
+
+    const rows = record.previewRows;
+    if (rows.length === 0) {
+      skipped += 1;
+      return record;
+    }
+
+    const mapping = resolveFieldMapping(record.headers, rows, savedMapping);
+
+    if (!canRunFireExitIntelligence(rows, mapping)) {
+      skipped += 1;
+      return record;
+    }
+
+    if (isFullImportAnalysis(record)) {
+      skipped += 1;
+      return record;
+    }
+
+    const snapshot = buildImportAnalysis(
+      record.headers,
+      rows,
+      record.fileName,
+      mapping,
+    );
+
+    refreshed += 1;
+    previewFallback += 1;
+    return {
+      ...record,
+      analysisSnapshot: snapshot,
+    };
+  });
+
+  if (refreshed > 0) {
+    setStorageItem(STORAGE_KEY, JSON.stringify(updated));
+  }
+
+  return { refreshed, skipped, previewFallback };
 }
 
 export function getImportStats(imports: ImportRecord[]) {

@@ -1,4 +1,5 @@
 import type { FireExitIntelligenceReport } from "@/lib/analytics/types";
+import { normalizeIntelligenceReport, getDoorIncidents } from "@/lib/analytics/normalize-intelligence";
 import { buildComplianceIntelligenceDashboard } from "@/lib/analytics/compliance-intelligence";
 import type { ComplianceIntelligenceDashboard } from "@/lib/analytics/compliance-intelligence";
 import { formatDurationLabel } from "@/lib/reports/held-open-detection";
@@ -21,10 +22,11 @@ import type {
 export function toDoorHealthAnalysis(
   report: FireExitIntelligenceReport,
 ): DoorHealthAnalysis {
-  const doors: DoorHealthRecord[] = report.doors.map((door) => ({
+  const normalized = normalizeIntelligenceReport(report);
+  const doors: DoorHealthRecord[] = normalized.doors.map((door) => ({
     door: door.door,
     totalEvents: door.totalFireExitEvents,
-    heldOpenEvents: door.totalHeldOpenEvents,
+    heldOpenEvents: door.totalIncidents,
     averageDurationSeconds: door.averageHeldOpenDurationSeconds,
     averageDurationLabel: door.averageHeldOpenDurationLabel,
     longestDurationSeconds: door.longestHeldOpenDurationSeconds,
@@ -45,25 +47,27 @@ export function toDoorHealthAnalysis(
 
   return {
     doors,
-    totalDoors: report.summary.totalDoors,
-    excellentDoors: report.summary.excellentDoors,
-    doorsNeedingAttention: report.summary.doorsNeedingAttention,
-    criticalDoors: report.summary.criticalDoors,
-    worstDoor: report.summary.worstDoor,
-    sourceFileName: report.sourceFileName,
-    hasDurationField: report.summary.hasDurationField,
-    intelligence: report,
+    totalDoors: normalized.summary.totalDoors,
+    excellentDoors: normalized.summary.excellentDoors,
+    doorsNeedingAttention: normalized.summary.doorsNeedingAttention,
+    criticalDoors: normalized.summary.criticalDoors,
+    worstDoor: normalized.summary.worstDoor,
+    sourceFileName: normalized.sourceFileName,
+    hasDurationField: normalized.summary.hasDurationField,
+    intelligence: normalized,
   };
 }
 
 export function toFireExitDashboardAnalysis(
   report: FireExitIntelligenceReport,
 ): FireExitDashboardAnalysis {
-  const problemDoors: ProblemDoor[] = report.doors
-    .filter((door) => door.totalHeldOpenEvents > 0)
+  const normalized = normalizeIntelligenceReport(report);
+
+  const problemDoors: ProblemDoor[] = normalized.doors
+    .filter((door) => door.totalIncidents > 0)
     .map((door) => ({
       door: door.door,
-      heldOpenEvents: door.totalHeldOpenEvents,
+      heldOpenEvents: door.totalIncidents,
       averageDurationSeconds: door.averageHeldOpenDurationSeconds,
       averageDurationLabel: door.averageHeldOpenDurationLabel,
       longestDurationSeconds: door.longestHeldOpenDurationSeconds,
@@ -80,15 +84,15 @@ export function toFireExitDashboardAnalysis(
       return a.complianceScore - b.complianceScore;
     });
 
-  const recentExceptions: HeldOpenEvent[] = report.doors
+  const recentExceptions: HeldOpenEvent[] = normalized.doors
     .flatMap((door) =>
-      door.sessions.map((session) => ({
-        time: formatEventTimeLabel(session.startTimeLabel),
+      getDoorIncidents(door).map((incident) => ({
+        time: formatEventTimeLabel(incident.startTimeLabel),
         door: door.door,
-        eventType: session.eventType,
-        durationSeconds: session.durationSeconds,
-        durationLabel: formatDurationLabel(session.durationSeconds),
-        exposureLabel: formatDurationLabel(session.exposureSeconds),
+        eventType: incident.eventType,
+        durationSeconds: incident.durationSeconds,
+        durationLabel: formatDurationLabel(incident.durationSeconds),
+        exposureLabel: formatDurationLabel(incident.timeBeyondThresholdSeconds),
       })),
     )
     .sort((a, b) => {
@@ -102,8 +106,8 @@ export function toFireExitDashboardAnalysis(
     })
     .slice(0, 15);
 
-  const violationDurations = report.doors.flatMap((door) =>
-    door.sessions.map((session) => session.durationSeconds),
+  const violationDurations = normalized.doors.flatMap((door) =>
+    getDoorIncidents(door).map((incident) => incident.durationSeconds),
   );
   const averageDuration =
     violationDurations.length > 0
@@ -112,58 +116,59 @@ export function toFireExitDashboardAnalysis(
       : null;
 
   return {
-    overallComplianceScore: report.summary.overallComplianceScore,
-    doorsMonitored: report.summary.totalDoors,
-    eventsAnalysed: report.analyzedRowCount,
-    heldOpenEvents: report.summary.totalHeldOpenEvents,
+    overallComplianceScore: normalized.summary.overallComplianceScore,
+    doorsMonitored: normalized.summary.totalDoors,
+    eventsAnalysed: normalized.analyzedRowCount,
+    heldOpenEvents: normalized.summary.totalHeldOpenEvents,
     averageOpenDurationSeconds: averageDuration,
     averageOpenDurationLabel: formatDurationLabel(averageDuration),
-    totalExposureLabel: report.summary.totalExposureLabel,
-    worstPerformingDoor: report.summary.worstDoor,
+    totalExposureLabel: normalized.summary.totalExposureLabel,
+    worstPerformingDoor: normalized.summary.worstDoor,
     problemDoors,
     recentExceptions,
-    sourceFileName: report.sourceFileName,
-    intelligence: report,
+    sourceFileName: normalized.sourceFileName,
+    intelligence: normalized,
   };
 }
 
 export function toExitComplianceAnalysis(
   report: FireExitIntelligenceReport,
 ): ExitComplianceAnalysis {
-  const dashboard = buildComplianceIntelligenceDashboard(report);
+  const normalized = normalizeIntelligenceReport(report);
+  const dashboard = buildComplianceIntelligenceDashboard(normalized);
 
-  const doorBreakdown = report.doors
-    .filter((door) => door.totalHeldOpenEvents > 0)
+  const doorBreakdown = normalized.doors
+    .filter((door) => door.totalIncidents > 0)
     .map((door) => ({
       door: door.door,
-      count: door.totalHeldOpenEvents,
+      count: door.totalIncidents,
       exposureLabel: door.totalExposureLabel,
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
-  const recentExceptions = report.doors
+  const recentExceptions = normalized.doors
     .flatMap((door) =>
-      door.sessions.map((session) => ({
-        time: formatEventTimeLabel(session.startTimeLabel),
-        type: session.eventType,
+      getDoorIncidents(door).map((incident) => ({
+        time: formatEventTimeLabel(incident.startTimeLabel),
+        type: incident.eventType,
         door: door.door,
-        result: `Exposure ${formatDurationLabel(session.exposureSeconds)}`,
+        result: `Time beyond threshold ${formatDurationLabel(incident.timeBeyondThresholdSeconds)}`,
       })),
     )
     .slice(0, 15);
 
   return {
-    totalEvents: report.analyzedRowCount,
-    uniqueDoors: report.summary.totalDoors,
+    totalEvents: normalized.analyzedRowCount,
+    uniqueDoors: normalized.summary.totalDoors,
     forcedOpenEvents: 0,
-    heldOpenEvents: report.summary.totalHeldOpenEvents,
-    lifeSafetyExceptions: report.summary.totalHeldOpenEvents,
-    otherEvents: report.analyzedRowCount - report.summary.totalHeldOpenEvents,
-    totalExposureLabel: report.summary.totalExposureLabel,
+    heldOpenEvents: normalized.summary.totalHeldOpenEvents,
+    lifeSafetyExceptions: normalized.summary.totalHeldOpenEvents,
+    otherEvents: normalized.analyzedRowCount - normalized.summary.totalHeldOpenEvents,
+    totalExposureLabel: normalized.summary.totalExposureLabel,
     doorBreakdown,
     recentExceptions,
-    intelligence: report,
+    intelligence: normalized,
     complianceDashboard: dashboard,
   };
 }

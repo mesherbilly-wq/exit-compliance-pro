@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   buildDoorIntelligenceRows,
   getDoorHighlightType,
@@ -15,12 +15,17 @@ import {
   type RiskRating,
   type TrendDirection,
 } from "@/lib/analytics/door-intelligence-view";
+import {
+  TIME_BEYOND_THRESHOLD_LABEL,
+  TIME_BEYOND_THRESHOLD_TOOLTIP,
+} from "@/lib/analytics/labels";
 import { loadLatestDoorHealthData } from "@/lib/imports/door-health-loader";
 import type { DoorHealthAnalysis } from "@/lib/reports/analyze-door-health";
 import type { DoorHealthStatus } from "@/lib/reports/held-open-detection";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
+import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 
 const STATUS_STYLES: Record<DoorHealthStatus, string> = {
   Excellent: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -49,11 +54,19 @@ const HIGHLIGHT_ROW_STYLES = {
   deteriorating: "bg-amber-500/5 ring-1 ring-inset ring-amber-500/20",
 };
 
-const COLUMNS: { key: DoorIntelligenceSortKey; label: string }[] = [
+const COLUMNS: {
+  key: DoorIntelligenceSortKey;
+  label: string;
+  title?: string;
+}[] = [
   { key: "door", label: "Door name" },
   { key: "complianceScore", label: "Compliance score" },
   { key: "riskRating", label: "Risk rating" },
-  { key: "totalExposureSeconds", label: "Total exposure time" },
+  {
+    key: "totalExposureSeconds",
+    label: TIME_BEYOND_THRESHOLD_LABEL,
+    title: TIME_BEYOND_THRESHOLD_TOOLTIP,
+  },
   { key: "averageHeldOpenDurationSeconds", label: "Average held open duration" },
   { key: "longestHeldOpenDurationSeconds", label: "Longest held open duration" },
   { key: "occurrences", label: "Occurrences" },
@@ -72,12 +85,18 @@ export function DoorIntelligenceContent() {
   const [sortKey, setSortKey] = useState<DoorIntelligenceSortKey>("riskRating");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  useEffect(() => {
+  const reloadData = useCallback(() => {
     const data = loadLatestDoorHealthData();
     setImportRecord(data.importRecord);
     setAnalysis(data.analysis);
     setLoaded(true);
-  }, [pathname]);
+  }, []);
+
+  useEffect(() => {
+    reloadData();
+  }, [pathname, reloadData]);
+
+  useImportsRefreshed(reloadData);
 
   const rows = useMemo(() => {
     if (!analysis) {
@@ -175,14 +194,19 @@ export function DoorIntelligenceContent() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Fire exits monitored" value={summary.totalDoors.toLocaleString()} accent="text-white" />
         <SummaryCard label="Doors with violations" value={summary.doorsWithViolations.toLocaleString()} accent="text-amber-400" />
-        <SummaryCard label="Total exposure" value={summary.totalExposureLabel} accent="text-red-400" />
+        <SummaryCard
+          label={TIME_BEYOND_THRESHOLD_LABEL}
+          value={summary.totalExposureLabel}
+          accent="text-red-400"
+          title={TIME_BEYOND_THRESHOLD_TOOLTIP}
+        />
         <SummaryCard label="Portfolio score" value={`${summary.overallComplianceScore}%`} accent="text-cyan-400" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
         <HighlightPanel
           title="Top 10 highest risk"
-          subtitle="Highest exposure and risk rating"
+          subtitle="Highest time beyond threshold and risk rating"
           doors={highestRisk}
           emptyMessage="No held-open violations detected."
           tone="red"
@@ -237,6 +261,7 @@ export function DoorIntelligenceContent() {
                       type="button"
                       onClick={() => handleSort(column.key)}
                       className="inline-flex items-center gap-1 hover:text-white"
+                      title={column.title}
                     >
                       {column.label}
                       {sortKey === column.key && (
@@ -319,14 +344,18 @@ function SummaryCard({
   label,
   value,
   accent,
+  title,
 }: {
   label: string;
   value: string;
   accent: string;
+  title?: string;
 }) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p className="text-sm text-slate-400">{label}</p>
+      <p className="text-sm text-slate-400" title={title}>
+        {label}
+      </p>
       <p className={`mt-2 text-3xl font-bold ${accent}`}>{value}</p>
     </div>
   );
@@ -370,7 +399,7 @@ function HighlightPanel({
                   {index + 1}. {door.door}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
-                  {door.riskRating} risk · {door.totalExposureLabel} exposure · {door.trend}
+                  {door.riskRating} risk · {door.totalExposureLabel} beyond threshold · {door.trend}
                 </p>
               </div>
               <span className="shrink-0 text-xs text-slate-400">{door.complianceScore}%</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   buildComplianceIntelligenceDashboard,
   type ComplianceIntelligenceDashboard,
@@ -17,6 +17,12 @@ import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
 import type { RiskRating } from "@/lib/analytics/door-intelligence-view";
+import {
+  AVERAGE_TIME_BEYOND_THRESHOLD_LABEL,
+  TIME_BEYOND_THRESHOLD_LABEL,
+  TIME_BEYOND_THRESHOLD_TOOLTIP,
+} from "@/lib/analytics/labels";
+import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 
 const RISK_STYLES: Record<RiskRating, string> = {
   Low: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -80,12 +86,18 @@ export function ComplianceIntelligenceContent() {
   );
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  const reloadDashboard = useCallback(() => {
     const data = loadComplianceDashboard();
     setImportRecord(data.importRecord);
     setDashboard(data.dashboard);
     setLoaded(true);
   }, []);
+
+  useEffect(() => {
+    reloadDashboard();
+  }, [reloadDashboard]);
+
+  useImportsRefreshed(reloadDashboard);
 
   const primaryCards = useMemo(() => {
     if (!dashboard) {
@@ -139,12 +151,13 @@ export function ComplianceIntelligenceContent() {
         accent: "text-red-400",
       },
       {
-        label: "Total exposure time",
+        label: TIME_BEYOND_THRESHOLD_LABEL,
         value: dashboard.totalExposureLabel,
         accent: "text-red-400",
+        title: TIME_BEYOND_THRESHOLD_TOOLTIP,
       },
       {
-        label: "Average exposure per door",
+        label: AVERAGE_TIME_BEYOND_THRESHOLD_LABEL,
         value: dashboard.averageExposurePerDoorLabel,
         accent: "text-white",
       },
@@ -269,7 +282,9 @@ export function ComplianceIntelligenceContent() {
             key={card.label}
             className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
           >
-            <p className="text-sm text-slate-400">{card.label}</p>
+            <p className="text-sm text-slate-400" title={card.title}>
+              {card.label}
+            </p>
             <p className={`mt-2 text-2xl font-bold ${card.accent}`}>{card.value}</p>
           </div>
         ))}

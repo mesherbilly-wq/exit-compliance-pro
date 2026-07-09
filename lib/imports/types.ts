@@ -26,9 +26,10 @@ export type ImportAnalysisSnapshot = {
   mapping: FieldMapping;
   analyzedRowCount: number;
   intelligence: import("@/lib/analytics/types").FireExitIntelligenceReport;
+  parsedEvents?: import("@/lib/analytics/types").ParsedFireExitEvent[];
+  hasDurationField?: boolean;
   /** @deprecated Legacy snapshot fields */
   sourceFileName?: string;
-  hasDurationField?: boolean;
   totalDoors?: number;
   excellentDoors?: number;
   doorsNeedingAttention?: number;

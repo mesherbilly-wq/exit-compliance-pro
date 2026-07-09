@@ -1,8 +1,4 @@
-import type {
-  DistributionBucket,
-  HeldOpenSession,
-  TrendPoint,
-} from "./types";
+import type { ComplianceIncident, DistributionBucket, TrendPoint } from "./types";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -27,7 +23,7 @@ function monthKey(timestamp: number): string {
 }
 
 export function buildTimeOfDayDistribution(
-  sessions: HeldOpenSession[],
+  incidents: ComplianceIncident[],
 ): DistributionBucket[] {
   const buckets = Array.from({ length: 24 }, (_, hour) => ({
     label: `${String(hour).padStart(2, "0")}:00`,
@@ -35,17 +31,17 @@ export function buildTimeOfDayDistribution(
     exposureSeconds: 0,
   }));
 
-  for (const session of sessions) {
-    const hour = new Date(session.startTimestamp).getHours();
-    buckets[hour].count += 1;
-    buckets[hour].exposureSeconds += session.exposureSeconds;
+  for (const incident of incidents) {
+    buckets[incident.hourStarted].count += 1;
+    buckets[incident.hourStarted].exposureSeconds +=
+      incident.timeBeyondThresholdSeconds;
   }
 
   return buckets;
 }
 
 export function buildDayOfWeekDistribution(
-  sessions: HeldOpenSession[],
+  incidents: ComplianceIncident[],
 ): DistributionBucket[] {
   const buckets = DAY_LABELS.map((label) => ({
     label,
@@ -53,20 +49,24 @@ export function buildDayOfWeekDistribution(
     exposureSeconds: 0,
   }));
 
-  for (const session of sessions) {
-    const day = new Date(session.startTimestamp).getDay();
-    buckets[day].count += 1;
-    buckets[day].exposureSeconds += session.exposureSeconds;
+  for (const incident of incidents) {
+    const dayIndex = DAY_LABELS.indexOf(incident.dayStarted);
+    if (dayIndex === -1) {
+      continue;
+    }
+
+    buckets[dayIndex].count += 1;
+    buckets[dayIndex].exposureSeconds += incident.timeBeyondThresholdSeconds;
   }
 
   return buckets;
 }
 
-export function buildWeeklyTrend(sessions: HeldOpenSession[]): TrendPoint[] {
+export function buildWeeklyTrend(incidents: ComplianceIncident[]): TrendPoint[] {
   const grouped = new Map<string, TrendPoint>();
 
-  for (const session of sessions) {
-    const periodKey = weekKey(session.startTimestamp);
+  for (const incident of incidents) {
+    const periodKey = weekKey(incident.startTimestamp);
     const existing = grouped.get(periodKey) ?? {
       periodKey,
       label: periodKey,
@@ -75,7 +75,7 @@ export function buildWeeklyTrend(sessions: HeldOpenSession[]): TrendPoint[] {
     };
 
     existing.heldOpenEvents += 1;
-    existing.exposureSeconds += session.exposureSeconds;
+    existing.exposureSeconds += incident.timeBeyondThresholdSeconds;
     grouped.set(periodKey, existing);
   }
 
@@ -84,11 +84,11 @@ export function buildWeeklyTrend(sessions: HeldOpenSession[]): TrendPoint[] {
   );
 }
 
-export function buildMonthlyTrend(sessions: HeldOpenSession[]): TrendPoint[] {
+export function buildMonthlyTrend(incidents: ComplianceIncident[]): TrendPoint[] {
   const grouped = new Map<string, TrendPoint>();
 
-  for (const session of sessions) {
-    const periodKey = monthKey(session.startTimestamp);
+  for (const incident of incidents) {
+    const periodKey = monthKey(incident.startTimestamp);
     const existing = grouped.get(periodKey) ?? {
       periodKey,
       label: periodKey,
@@ -97,7 +97,7 @@ export function buildMonthlyTrend(sessions: HeldOpenSession[]): TrendPoint[] {
     };
 
     existing.heldOpenEvents += 1;
-    existing.exposureSeconds += session.exposureSeconds;
+    existing.exposureSeconds += incident.timeBeyondThresholdSeconds;
     grouped.set(periodKey, existing);
   }
 
@@ -106,19 +106,21 @@ export function buildMonthlyTrend(sessions: HeldOpenSession[]): TrendPoint[] {
   );
 }
 
-export function countDaysAffected(sessions: HeldOpenSession[]): number {
-  const days = new Set(sessions.map((session) => dateKey(session.startTimestamp)));
+export function countDaysAffected(incidents: ComplianceIncident[]): number {
+  const days = new Set(
+    incidents.map((incident) => dateKey(incident.startTimestamp)),
+  );
   return days.size;
 }
 
-export function countRepeatOccurrences(sessions: HeldOpenSession[]): number {
-  if (sessions.length <= 1) {
+export function countRepeatOccurrences(incidents: ComplianceIncident[]): number {
+  if (incidents.length <= 1) {
     return 0;
   }
 
   const byDay = new Map<string, number>();
-  for (const session of sessions) {
-    const key = dateKey(session.startTimestamp);
+  for (const incident of incidents) {
+    const key = dateKey(incident.startTimestamp);
     byDay.set(key, (byDay.get(key) ?? 0) + 1);
   }
 
@@ -129,7 +131,7 @@ export function countRepeatOccurrences(sessions: HeldOpenSession[]): number {
     }
   }
 
-  return Math.max(repeats, sessions.length - 1);
+  return Math.max(repeats, incidents.length - 1);
 }
 
 export function average(values: number[]): number | null {

@@ -1,9 +1,46 @@
 import type { FieldMapping } from "@/lib/imports/types";
 import type { DoorHealthStatus } from "@/lib/reports/held-open-detection";
 
+export type RiskRating = "Low" | "Medium" | "High" | "Critical";
+
 export type FireExitAnalyticsConfig = {
   heldOpenThresholdSeconds: number;
 };
+
+export type IncidentDurationBucket =
+  | "Brief"
+  | "Moderate"
+  | "Extended"
+  | "Critical";
+
+export type ComplianceIncident = {
+  door: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  startTimeLabel: string;
+  endTimeLabel: string;
+  durationSeconds: number;
+  thresholdSeconds: number;
+  timeBeyondThresholdSeconds: number;
+  riskRating: RiskRating;
+  durationBucket: IncidentDurationBucket;
+  dayStarted: string;
+  hourStarted: number;
+  isExplicitAlarm: boolean;
+  eventType: string;
+};
+
+/** @deprecated Use ComplianceIncident */
+export type HeldOpenSession = ComplianceIncident & {
+  exposureSeconds: number;
+};
+
+export function toHeldOpenSession(incident: ComplianceIncident): HeldOpenSession {
+  return {
+    ...incident,
+    exposureSeconds: incident.timeBeyondThresholdSeconds,
+  };
+}
 
 export type DistributionBucket = {
   label: string;
@@ -18,21 +55,11 @@ export type TrendPoint = {
   exposureSeconds: number;
 };
 
-export type HeldOpenSession = {
-  door: string;
-  startTimestamp: number;
-  endTimestamp: number;
-  startTimeLabel: string;
-  endTimeLabel: string;
-  durationSeconds: number;
-  exposureSeconds: number;
-  isExplicitAlarm: boolean;
-  eventType: string;
-};
-
 export type DoorIntelligenceProfile = {
   door: string;
   totalFireExitEvents: number;
+  totalIncidents: number;
+  /** @deprecated Use totalIncidents */
   totalHeldOpenEvents: number;
   totalExposureSeconds: number;
   totalExposureLabel: string;
@@ -50,7 +77,9 @@ export type DoorIntelligenceProfile = {
   monthlyTrend: TrendPoint[];
   complianceScore: number;
   status: DoorHealthStatus;
-  sessions: HeldOpenSession[];
+  incidents: ComplianceIncident[];
+  /** @deprecated Use incidents */
+  sessions: ComplianceIncident[];
 };
 
 export type FireExitPortfolioSummary = {

@@ -14,6 +14,7 @@ import {
   buildComplianceIntelligenceDashboard,
   type ComplianceRecommendation,
 } from "./compliance-intelligence";
+import { getDoorIncidents, normalizeIntelligenceReport } from "./normalize-intelligence";
 import { formatDurationLabel } from "@/lib/reports/held-open-detection";
 
 export type SiteHealthRating =
@@ -244,9 +245,9 @@ function countCriticalIncidents(report: FireExitIntelligenceReport): number {
   let count = 0;
 
   for (const door of report.doors) {
-    for (const session of door.sessions) {
+    for (const incident of getDoorIncidents(door)) {
       const isCriticalDoor = door.status === "Critical";
-      const isHighExposure = session.exposureSeconds >= 180;
+      const isHighExposure = incident.timeBeyondThresholdSeconds >= 180;
 
       if (isCriticalDoor || isHighExposure) {
         count += 1;
@@ -259,7 +260,7 @@ function countCriticalIncidents(report: FireExitIntelligenceReport): number {
 
 function buildDataPeriodLabel(report: FireExitIntelligenceReport): string {
   const timestamps = report.doors.flatMap((door) =>
-    door.sessions.map((session) => session.startTimestamp),
+    getDoorIncidents(door).map((incident) => incident.startTimestamp),
   );
 
   if (timestamps.length === 0) {
@@ -287,7 +288,7 @@ function toExecutiveRiskItem(
     exposureLabel: row.totalExposureLabel,
     occurrences: row.occurrences,
     trend: row.trend,
-    summary: `${row.riskRating} risk · ${row.totalExposureLabel} exposure · ${row.occurrences} held-open session${row.occurrences === 1 ? "" : "s"}`,
+    summary: `${row.riskRating} risk · ${row.totalExposureLabel} time beyond threshold · ${row.occurrences} held-open session${row.occurrences === 1 ? "" : "s"}`,
   };
 }
 
@@ -301,7 +302,7 @@ function toExecutiveImprovementItem(
     complianceScore: row.complianceScore,
     trend: row.trend,
     exposureLabel: row.totalExposureLabel,
-    summary: `Improving trend · ${row.complianceScore}% compliance · ${row.totalExposureLabel} remaining exposure`,
+    summary: `Improving trend · ${row.complianceScore}% compliance · ${row.totalExposureLabel} remaining time beyond threshold`,
   };
 }
 
@@ -352,13 +353,14 @@ export function buildExecutiveReport(
   report: FireExitIntelligenceReport,
   reportDate = new Date().toISOString(),
 ): ExecutiveReport {
-  const rows = buildDoorIntelligenceRows(report.doors);
-  const compliance = buildComplianceIntelligenceDashboard(report);
+  const normalized = normalizeIntelligenceReport(report);
+  const rows = buildDoorIntelligenceRows(normalized.doors);
+  const compliance = buildComplianceIntelligenceDashboard(normalized);
   const highestRisk = getTopHighestRiskDoors(rows, 1)[0];
-  const { rating, summary: siteHealthSummary } = getSiteHealthRating(report);
-  const criticalIncidents = countCriticalIncidents(report);
+  const { rating, summary: siteHealthSummary } = getSiteHealthRating(normalized);
+  const criticalIncidents = countCriticalIncidents(normalized);
 
-  const healthyDoors = report.doors.filter(
+  const healthyDoors = normalized.doors.filter(
     (door) => door.status === "Excellent" || door.status === "Good",
   ).length;
 
@@ -368,17 +370,17 @@ export function buildExecutiveReport(
   return {
     reportDate,
     reportDateLabel: formatReportDate(reportDate),
-    sourceFileName: report.sourceFileName,
-    analyzedAt: report.analyzedAt,
-    dataPeriodLabel: buildDataPeriodLabel(report),
-    overallComplianceScore: report.summary.overallComplianceScore,
-    complianceTrend: buildComplianceTrend(report),
-    highestRiskDoor: highestRisk?.door ?? report.summary.worstDoor,
+    sourceFileName: normalized.sourceFileName,
+    analyzedAt: normalized.analyzedAt,
+    dataPeriodLabel: buildDataPeriodLabel(normalized),
+    overallComplianceScore: normalized.summary.overallComplianceScore,
+    complianceTrend: buildComplianceTrend(normalized),
+    highestRiskDoor: highestRisk?.door ?? normalized.summary.worstDoor,
     highestRiskDoorDetail: highestRisk
-      ? `${highestRisk.riskRating} risk · ${highestRisk.totalExposureLabel} exposure`
+      ? `${highestRisk.riskRating} risk · ${highestRisk.totalExposureLabel} time beyond threshold`
       : "No held-open violations recorded",
-    totalExposureLabel: report.summary.totalExposureLabel,
-    totalExposureSeconds: report.summary.totalExposureSeconds,
+    totalExposureLabel: normalized.summary.totalExposureLabel,
+    totalExposureSeconds: normalized.summary.totalExposureSeconds,
     criticalIncidents,
     criticalIncidentsLabel:
       criticalIncidents === 0
@@ -386,14 +388,14 @@ export function buildExecutiveReport(
         : `${criticalIncidents} session${criticalIncidents === 1 ? "" : "s"} requiring executive attention`,
     siteHealthRating: rating,
     siteHealthSummary,
-    totalDoors: report.summary.totalDoors,
+    totalDoors: normalized.summary.totalDoors,
     healthyDoors,
-    doorsRequiringAttention: report.summary.doorsNeedingAttention,
-    criticalDoors: report.summary.criticalDoors,
+    doorsRequiringAttention: normalized.summary.doorsNeedingAttention,
+    criticalDoors: normalized.summary.criticalDoors,
     topComplianceRisks,
     topImprovements,
     operationalRecommendations: compliance.recommendations,
-    intelligence: report,
+    intelligence: normalized,
   };
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   buildHeatMapDashboard,
   DEFAULT_HEAT_MAP_FILTERS,
@@ -21,7 +21,9 @@ import type { FireExitIntelligenceReport } from "@/lib/analytics/types";
 import type { RiskRating } from "@/lib/analytics/door-intelligence-view";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
 import { formatDurationLabel } from "@/lib/reports/held-open-detection";
+import { TIME_BEYOND_THRESHOLD_LABEL } from "@/lib/analytics/labels";
 import { HeatMapGridView } from "@/components/heat-maps/heat-map-grid";
+import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 
 const RISK_LEVELS: Array<RiskRating | "All"> = [
   "All",
@@ -79,13 +81,19 @@ export function HeatMapsContent() {
   );
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  const reloadHeatMapSource = useCallback(() => {
     const source = loadHeatMapSource();
     setImportRecord(source.importRecord);
     setReport(source.report);
     setRows(source.rows);
     setLoaded(true);
   }, []);
+
+  useEffect(() => {
+    reloadHeatMapSource();
+  }, [reloadHeatMapSource]);
+
+  useImportsRefreshed(reloadHeatMapSource);
 
   const dashboard = useMemo<HeatMapDashboard | null>(() => {
     if (!report) {
@@ -107,15 +115,15 @@ export function HeatMapsContent() {
 
     return [
       {
-        label: "Filtered events",
-        value: dashboard.totalEvents.toLocaleString(),
+        label: "Filtered incidents",
+        value: dashboard.totalIncidents.toLocaleString(),
       },
       {
-        label: "Held-open sessions",
-        value: dashboard.totalSessions.toLocaleString(),
+        label: "Doors with incidents",
+        value: dashboard.doorsWithIncidents.toLocaleString(),
       },
       {
-        label: "Exposure in view",
+        label: `${TIME_BEYOND_THRESHOLD_LABEL} in view`,
         value: formatDurationLabel(dashboard.totalExposureSeconds),
       },
       {
@@ -199,8 +207,7 @@ export function HeatMapsContent() {
         </p>
         <h2 className="mt-3 text-3xl font-bold tracking-tight">Operational Heat Maps</h2>
         <p className="mt-4 max-w-3xl text-slate-300">
-          Interactive intensity grids derived from fire exit events and held-open
-          session analytics for{" "}
+          Interactive intensity grids derived from merged compliance incidents for{" "}
           <span className="font-medium text-white">{dashboard.sourceFileName}</span>.
           Busier periods appear with stronger colour intensity.
         </p>
