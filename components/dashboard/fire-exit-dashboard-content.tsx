@@ -2,18 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { toFireExitDashboardAnalysis } from "@/lib/analytics/report-adapters";
 import {
   analyzeFireExitDashboard,
   canRunFireExitDashboard,
 } from "@/lib/reports/analyze-fire-exit-dashboard";
 import type { FireExitDashboardAnalysis } from "@/lib/reports/analyze-fire-exit-dashboard";
 import type { DoorComplianceStatus } from "@/lib/reports/held-open-detection";
+import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
+import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
 import {
   getFieldMapping,
   getLatestImport,
   getLatestImportData,
 } from "@/lib/imports/storage";
 import type { FieldMapping, ImportRecord } from "@/lib/imports/types";
+import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 
 const STATUS_STYLES: Record<DoorComplianceStatus, string> = {
   Compliant: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -28,15 +32,26 @@ export function FireExitDashboardContent() {
 
   useEffect(() => {
     const latest = getLatestImport();
+    const rows = getLatestImportData();
     setImportRecord(latest);
-    setMapping(latest ? getFieldMapping(latest.id) : null);
+    setMapping(
+      latest ? resolveFieldMapping(latest.headers, rows, getFieldMapping(latest.id)) : null,
+    );
     setLoaded(true);
   }, []);
 
   const rows = useMemo(() => getLatestImportData(), [loaded, importRecord]);
 
   const analysis = useMemo<FireExitDashboardAnalysis | null>(() => {
-    if (!importRecord || !mapping || !canRunFireExitDashboard(rows, mapping)) {
+    if (!importRecord || !mapping) {
+      return null;
+    }
+
+    if (importRecord.analysisSnapshot?.intelligence) {
+      return toFireExitDashboardAnalysis(importRecord.analysisSnapshot.intelligence);
+    }
+
+    if (!canRunFireExitDashboard(rows, mapping)) {
       return null;
     }
 
@@ -103,12 +118,17 @@ export function FireExitDashboardContent() {
       accent: "text-white",
     },
     {
-      label: "Held-Open Events",
+      label: "Held-open Violations",
       value: analysis.heldOpenEvents.toLocaleString(),
       accent: "text-amber-400",
     },
     {
-      label: "Average Open Duration",
+      label: "Total Exposure Time",
+      value: analysis.totalExposureLabel ?? "N/A",
+      accent: "text-red-400",
+    },
+    {
+      label: "Average Violation Duration",
       value: analysis.averageOpenDurationLabel,
       accent: "text-white",
     },
@@ -122,16 +142,18 @@ export function FireExitDashboardContent() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
+      {isPreviewOnlyAnalysis(importRecord) && <PreviewDataBanner />}
+
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-cyan-400">
-            Fire Exit Compliance
+            Fire Exit Intelligence
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight">
-            Fire Exit Compliance Dashboard
+            Intelligence Dashboard
           </h2>
           <p className="mt-4 max-w-3xl text-slate-300">
-            Held-open and fire exit analysis for{" "}
+            Exposure-weighted held-open intelligence for{" "}
             <span className="font-medium text-white">
               {analysis.sourceFileName}
             </span>

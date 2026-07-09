@@ -20,9 +20,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           className="block"
         >
           <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">
-            Fire Exit
+            Fire Exit Intelligence
           </p>
-          <p className="mt-1 text-lg font-bold text-white">Compliance Pro</p>
+          <p className="mt-1 text-lg font-bold text-white">Platform</p>
         </Link>
       </div>
 

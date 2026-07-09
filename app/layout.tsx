@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Exit Compliance Pro",
+  title: "Fire Exit Intelligence Platform",
   description:
-    "Fire exit compliance and life safety platform for held-open events, door health and executive reporting.",
+    "Fire exit intelligence platform for held-open exposure analysis, door behaviour trends and life safety compliance reporting.",
 };
 
 export default function RootLayout({

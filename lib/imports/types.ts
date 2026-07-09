@@ -1,5 +1,15 @@
 export type ImportStatus = "ready_for_mapping" | "mapped" | "processed";
 
+export type CsvRow = Record<string, string>;
+
+export const PREVIEW_ROW_LIMIT = 25;
+
+export const PREVIEW_DATA_WARNING =
+  "Analysis is currently based on preview data only. Full dataset processing will be added with backend storage.";
+
+export const STORAGE_QUOTA_MESSAGE =
+  "CSV is too large for browser storage. Backend import storage is required.";
+
 export type ImportRecord = {
   id: string;
   fileName: string;
@@ -8,7 +18,41 @@ export type ImportRecord = {
   headers: string[];
   status: ImportStatus;
   uploadedAt: string;
+  previewRows: CsvRow[];
+  analysisSnapshot?: ImportAnalysisSnapshot;
 };
+
+export type ImportAnalysisSnapshot = {
+  mapping: FieldMapping;
+  analyzedRowCount: number;
+  intelligence: import("@/lib/analytics/types").FireExitIntelligenceReport;
+  /** @deprecated Legacy snapshot fields */
+  sourceFileName?: string;
+  hasDurationField?: boolean;
+  totalDoors?: number;
+  excellentDoors?: number;
+  doorsNeedingAttention?: number;
+  criticalDoors?: number;
+  worstDoor?: string;
+  doors?: {
+    door: string;
+    totalEvents: number;
+    heldOpenEvents: number;
+    averageDurationLabel: string;
+    longestDurationLabel: string;
+    lastEventTime: string;
+    complianceScore: number;
+    status: string;
+  }[];
+};
+
+export function isPreviewOnlyAnalysis(record: ImportRecord): boolean {
+  if (record.analysisSnapshot) {
+    return record.analysisSnapshot.analyzedRowCount < record.rowCount;
+  }
+
+  return record.rowCount > PREVIEW_ROW_LIMIT;
+}
 
 export type GenetecFieldKey =
   | "eventTime"

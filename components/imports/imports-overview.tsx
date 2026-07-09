@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type { ImportRecord } from "@/lib/imports/types";
 import { IMPORT_STATUS_LABELS } from "@/lib/imports/types";
@@ -41,9 +43,10 @@ export function ImportStatusCards({ imports }: ImportStatusCardsProps) {
 
 type RecentImportsTableProps = {
   imports: ImportRecord[];
+  onDelete: (importId: string) => void;
 };
 
-export function RecentImportsTable({ imports }: RecentImportsTableProps) {
+export function RecentImportsTable({ imports, onDelete }: RecentImportsTableProps) {
   if (imports.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900 p-10 text-center">
@@ -58,6 +61,16 @@ export function RecentImportsTable({ imports }: RecentImportsTableProps) {
     );
   }
 
+  function handleDelete(item: ImportRecord) {
+    const confirmed = window.confirm(
+      `Delete "${item.fileName}"? This will remove the import and its field mapping from browser storage.`,
+    );
+
+    if (confirmed) {
+      onDelete(item.id);
+    }
+  }
+
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
       <table className="min-w-full text-left text-sm">
@@ -68,6 +81,7 @@ export function RecentImportsTable({ imports }: RecentImportsTableProps) {
             <th className="px-4 py-3 font-medium">Columns</th>
             <th className="px-4 py-3 font-medium">Status</th>
             <th className="px-4 py-3 font-medium">Uploaded</th>
+            <th className="px-4 py-3 font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -83,6 +97,15 @@ export function RecentImportsTable({ imports }: RecentImportsTableProps) {
               </td>
               <td className="px-4 py-3 text-slate-400">
                 {new Date(item.uploadedAt).toLocaleString()}
+              </td>
+              <td className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item)}
+                  className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300"
+                >
+                  Delete
+                </button>
               </td>
             </tr>
           ))}

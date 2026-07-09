@@ -2,18 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { autoDetectFieldMapping } from "@/lib/imports/auto-detect";
+import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
 import {
   areRequiredFieldsMapped,
   getMappingCompleteness,
-  sanitizeMappingForHeaders,
 } from "@/lib/imports/mapping-utils";
 import {
   getFieldMapping,
   getLatestImport,
-  saveFieldMapping,
+  getLatestImportData,
+  saveImportAnalysisSnapshot,
   updateImportStatus,
 } from "@/lib/imports/storage";
+import { buildImportAnalysis } from "@/lib/imports/import-analysis";
 import {
   GENETEC_FIELDS,
   type FieldMapping,
@@ -35,13 +36,18 @@ export function FieldMappingContent() {
 
     setImportRecord(latest);
 
-    const saved = getFieldMapping(latest.id);
-    const initial = saved
-      ? sanitizeMappingForHeaders(saved, latest.headers)
-      : autoDetectFieldMapping(latest.headers);
+    const rows = getLatestImportData();
+    const initial = resolveFieldMapping(latest.headers, rows, getFieldMapping(latest.id));
 
     setMapping(initial);
-    saveFieldMapping(latest.id, initial);
+
+    const snapshot = buildImportAnalysis(
+      latest.headers,
+      rows,
+      latest.fileName,
+      initial,
+    );
+    saveImportAnalysisSnapshot(latest.id, snapshot);
 
     if (areRequiredFieldsMapped(initial)) {
       updateImportStatus(latest.id, "mapped");
@@ -65,7 +71,16 @@ export function FieldMappingContent() {
 
     const updated = { ...mapping, [fieldKey]: value };
     setMapping(updated);
-    saveFieldMapping(importRecord.id, updated);
+
+    const rows = getLatestImportData();
+    const snapshot = buildImportAnalysis(
+      importRecord.headers,
+      rows,
+      importRecord.fileName,
+      updated,
+    );
+
+    saveImportAnalysisSnapshot(importRecord.id, snapshot);
 
     updateImportStatus(
       importRecord.id,

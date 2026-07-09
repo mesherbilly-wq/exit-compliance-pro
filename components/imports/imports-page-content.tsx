@@ -6,7 +6,7 @@ import {
   ImportStatusCards,
   RecentImportsTable,
 } from "@/components/imports/imports-overview";
-import { getRecentImports } from "@/lib/imports/storage";
+import { deleteImport, getRecentImports } from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 
 export function ImportsPageContent() {
@@ -15,6 +15,10 @@ export function ImportsPageContent() {
   useEffect(() => {
     setImports(getRecentImports());
   }, []);
+
+  function handleDeleteImport(importId: string) {
+    setImports(deleteImport(importId));
+  }
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -53,7 +57,7 @@ export function ImportsPageContent() {
           </Link>
         </div>
 
-        <RecentImportsTable imports={imports} />
+        <RecentImportsTable imports={imports} onDelete={handleDeleteImport} />
       </section>
     </div>
   );

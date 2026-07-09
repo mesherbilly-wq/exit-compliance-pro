@@ -1,5 +1,5 @@
-import { DoorHealthContent } from "@/components/doors/door-health-content";
+import { DoorIntelligenceContent } from "@/components/doors/door-intelligence-content";
 
 export default function DoorsPage() {
-  return <DoorHealthContent />;
+  return <DoorIntelligenceContent />;
 }

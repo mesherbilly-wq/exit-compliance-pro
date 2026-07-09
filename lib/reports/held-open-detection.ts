@@ -1,3 +1,5 @@
+import type { FieldMapping } from "@/lib/imports/types";
+
 const HELD_OPEN_PATTERNS = [
   "held",
   "held open",
@@ -13,24 +15,51 @@ const DURATION_HEADER_PATTERNS = [
   "hold duration",
   "held duration",
   "time open",
-  "seconds",
   "elapsed",
+  "seconds",
+  "minutes",
 ];
 
-export function isHeldOpenEvent(eventType: string, accessResult = ""): boolean {
-  const text = `${eventType} ${accessResult}`.toLowerCase();
+function matchesDurationHeader(header: string): boolean {
+  const normalized = header.toLowerCase();
+  return DURATION_HEADER_PATTERNS.some((pattern) =>
+    normalized.includes(pattern),
+  );
+}
+
+export function isHeldOpenEvent(eventType: string): boolean {
+  const text = eventType.toLowerCase();
   return HELD_OPEN_PATTERNS.some((pattern) => text.includes(pattern));
 }
 
-export function findDurationColumn(headers: string[]): string | null {
+export function findDurationColumns(
+  headers: string[],
+  mapping?: FieldMapping,
+): string[] {
+  const columns = new Set<string>();
+
   for (const header of headers) {
-    const normalized = header.toLowerCase();
-    if (DURATION_HEADER_PATTERNS.some((pattern) => normalized.includes(pattern))) {
-      return header;
+    if (matchesDurationHeader(header)) {
+      columns.add(header);
     }
   }
 
-  return null;
+  if (mapping) {
+    for (const column of Object.values(mapping)) {
+      if (column && matchesDurationHeader(column)) {
+        columns.add(column);
+      }
+    }
+  }
+
+  return [...columns];
+}
+
+export function findDurationColumn(
+  headers: string[],
+  mapping?: FieldMapping,
+): string | null {
+  return findDurationColumns(headers, mapping)[0] ?? null;
 }
 
 export function parseDurationSeconds(value: string): number | null {
@@ -42,12 +71,16 @@ export function parseDurationSeconds(value: string): number | null {
     return directNumber;
   }
 
-  const secondsMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:sec|second|seconds|s)\b/i);
+  const secondsMatch = trimmed.match(
+    /(\d+(?:\.\d+)?)\s*(?:sec|second|seconds|s)\b/i,
+  );
   if (secondsMatch) {
     return Number(secondsMatch[1]);
   }
 
-  const minutesMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:min|minute|minutes|m)\b/i);
+  const minutesMatch = trimmed.match(
+    /(\d+(?:\.\d+)?)\s*(?:min|minute|minutes|m)\b/i,
+  );
   if (minutesMatch) {
     return Number(minutesMatch[1]) * 60;
   }
@@ -64,8 +97,12 @@ export function parseDurationSeconds(value: string): number | null {
 }
 
 export function formatDuration(seconds: number | null): string {
+  return formatDurationLabel(seconds);
+}
+
+export function formatDurationLabel(seconds: number | null): string {
   if (seconds === null || seconds <= 0) {
-    return "—";
+    return "N/A";
   }
 
   if (seconds < 60) {
@@ -82,6 +119,37 @@ export function formatDuration(seconds: number | null): string {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+export function formatDurationReadable(seconds: number | null): string {
+  if (seconds === null || seconds <= 0) {
+    return "N/A";
+  }
+
+  if (seconds < 60) {
+    const rounded = Math.round(seconds);
+    return `${rounded} sec`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+
+  if (minutes < 60) {
+    if (remainingSeconds > 0) {
+      return `${minutes} min ${remainingSeconds} sec`;
+    }
+
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (remainingMinutes > 0) {
+    return `${hours} hour${hours === 1 ? "" : "s"} and ${remainingMinutes} min`;
+  }
+
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
 }
 
 export type DoorComplianceStatus = "Compliant" | "Warning" | "Critical";

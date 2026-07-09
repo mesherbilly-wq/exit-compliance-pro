@@ -3,9 +3,13 @@
 import Link from "next/link";
 import Papa from "papaparse";
 import { useState } from "react";
-import { saveImport, saveImportData } from "@/lib/imports/storage";
+import { saveImport, saveImportData, StorageError } from "@/lib/imports/storage";
+import {
+  fixHeaderlessCsvParse,
+  looksLikeHeaderlessExport,
+} from "@/lib/imports/resolve-mapping";
 import type { ImportRecord } from "@/lib/imports/types";
-import { IMPORT_STATUS_LABELS } from "@/lib/imports/types";
+import { IMPORT_STATUS_LABELS, PREVIEW_ROW_LIMIT } from "@/lib/imports/types";
 
 type CsvRow = Record<string, string>;
 
@@ -14,6 +18,7 @@ export function CsvUploadForm() {
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [importRecord, setImportRecord] = useState<ImportRecord | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
 
   function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -21,13 +26,20 @@ export function CsvUploadForm() {
 
     setFileName(file.name);
     setImportRecord(null);
+    setStorageError(null);
 
     Papa.parse<CsvRow>(file, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const parsedHeaders = results.meta.fields ?? [];
-        const parsedRows = results.data;
+        let parsedHeaders = results.meta.fields ?? [];
+        let parsedRows = results.data;
+
+        if (looksLikeHeaderlessExport(parsedHeaders)) {
+          const fixed = fixHeaderlessCsvParse(parsedHeaders, parsedRows);
+          parsedHeaders = fixed.headers;
+          parsedRows = fixed.rows;
+        }
 
         setRows(parsedRows);
         setHeaders(parsedHeaders);
@@ -40,11 +52,27 @@ export function CsvUploadForm() {
           headers: parsedHeaders,
           status: "ready_for_mapping",
           uploadedAt: new Date().toISOString(),
+          previewRows: [],
         };
 
-        saveImport(record);
-        saveImportData(record.id, parsedRows);
-        setImportRecord(record);
+        try {
+          saveImport(record);
+          saveImportData(record.id, parsedRows);
+          setImportRecord({
+            ...record,
+            previewRows: parsedRows.slice(0, PREVIEW_ROW_LIMIT),
+          });
+        } catch (error) {
+          setRows([]);
+          setHeaders([]);
+          setImportRecord(null);
+
+          if (error instanceof StorageError) {
+            setStorageError(error.message);
+          } else {
+            setStorageError("Failed to save import. Please try again.");
+          }
+        }
       },
     });
   }
@@ -90,9 +118,15 @@ export function CsvUploadForm() {
           />
         </label>
 
-        {fileName && !importRecord && (
+        {fileName && !importRecord && !storageError && (
           <p className="mt-4 text-sm text-slate-300">
             Processing: <span className="font-semibold">{fileName}</span>
+          </p>
+        )}
+
+        {storageError && (
+          <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {storageError}
           </p>
         )}
       </section>
@@ -146,11 +180,13 @@ export function CsvUploadForm() {
         </section>
       )}
 
-      {rows.length > 0 && (
+      {rows.length > 0 && importRecord && (
         <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
           <h3 className="text-2xl font-semibold">CSV Preview</h3>
           <p className="mt-2 text-sm text-slate-400">
-            Showing {Math.min(rows.length, 10)} of {rows.length} rows.
+            Showing {Math.min(rows.length, 10)} of {importRecord.rowCount}{" "}
+            rows. Only the first {PREVIEW_ROW_LIMIT} rows are stored in browser
+            storage for preview and analysis.
           </p>
 
           <div className="mt-6 overflow-x-auto">
