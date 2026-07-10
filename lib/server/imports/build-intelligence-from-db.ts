@@ -1,7 +1,10 @@
 import type { FieldMapping } from "@/lib/imports/types";
 import type { ImportAnalysisSnapshot } from "@/lib/imports/types";
+import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
+import { runFireExitIntelligenceFromParsedEvents } from "@/lib/analytics/fire-exit-intelligence-engine";
 import { normalizeIntelligenceReport } from "@/lib/analytics/normalize-intelligence";
 import type {
+  FireExitAnalyticsConfig,
   FireExitIntelligenceReport,
   ParsedFireExitEvent,
 } from "@/lib/analytics/types";
@@ -13,20 +16,51 @@ import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 
 export async function buildIntelligenceReportFromImport(
   record: ServerImportRecord,
+  config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
 ): Promise<FireExitIntelligenceReport | null> {
-  const doors = await loadDoorProfilesForImport(record.id);
+  const parsedEvents = await loadParsedEventsForImport(record.id).catch(
+    (): ParsedFireExitEvent[] => [],
+  );
 
-  if (doors.length === 0) {
-    if (record.analysis_snapshot) {
-      const snapshot = record.analysis_snapshot as ImportAnalysisSnapshot;
-      return snapshot.intelligence
-        ? normalizeIntelligenceReport(snapshot.intelligence)
-        : null;
-    }
+  if (parsedEvents.length > 0 && record.field_mapping) {
+    const mapping = record.field_mapping as FieldMapping;
+    const artifacts = runFireExitIntelligenceFromParsedEvents(
+      parsedEvents,
+      record.headers,
+      [],
+      {
+        sourceFileName: record.file_name,
+        config,
+        analyzedRowCount: record.row_count,
+        hasDurationField: record.has_duration_field ?? false,
+        mapping,
+      },
+    );
 
-    return null;
+    return normalizeIntelligenceReport(artifacts.report);
   }
 
+  const doors = await loadDoorProfilesForImport(record.id);
+
+  if (doors.length > 0) {
+    return rebuildFromDoorProfiles(record, doors, config);
+  }
+
+  if (record.analysis_snapshot) {
+    const snapshot = record.analysis_snapshot as ImportAnalysisSnapshot;
+    if (snapshot.intelligence) {
+      return normalizeIntelligenceReport(snapshot.intelligence);
+    }
+  }
+
+  return null;
+}
+
+function rebuildFromDoorProfiles(
+  record: ServerImportRecord,
+  doors: FireExitIntelligenceReport["doors"],
+  config: FireExitAnalyticsConfig,
+): FireExitIntelligenceReport {
   const totalFireExitEvents = doors.reduce(
     (sum, door) => sum + door.totalFireExitEvents,
     0,
@@ -39,38 +73,18 @@ export async function buildIntelligenceReportFromImport(
     (sum, door) => sum + door.totalExposureSeconds,
     0,
   );
-  const doorsWithViolations = doors.filter((door) => door.totalIncidents > 0).length;
-  const excellentDoors = doors.filter((door) => door.status === "Excellent").length;
-  const doorsNeedingAttention = doors.filter(
-    (door) => door.status === "Needs Attention",
-  ).length;
-  const criticalDoors = doors.filter((door) => door.status === "Critical").length;
 
   const overallComplianceScore =
-    record.compliance_score_snapshot !== null &&
-    record.compliance_score_snapshot !== undefined
-      ? Number(record.compliance_score_snapshot)
-      : doors.length > 0
-        ? Math.round(
-            doors.reduce((sum, door) => sum + door.complianceScore, 0) / doors.length,
-          )
-        : 100;
-
-  const worstDoor =
-    [...doors]
-      .sort((a, b) => {
-        if (a.complianceScore !== b.complianceScore) {
-          return a.complianceScore - b.complianceScore;
-        }
-
-        return b.totalExposureSeconds - a.totalExposureSeconds;
-      })[0]?.door ?? "N/A";
+    doors.length > 0
+      ? Math.round(
+          doors.reduce((sum, door) => sum + door.complianceScore, 0) / doors.length,
+        )
+      : 100;
 
   const mapping = (record.field_mapping ?? {}) as FieldMapping;
-  const snapshot = record.analysis_snapshot as ImportAnalysisSnapshot | null;
 
-  const report: FireExitIntelligenceReport = {
-    config: snapshot?.intelligence?.config ?? { heldOpenThresholdSeconds: 30 },
+  return normalizeIntelligenceReport({
+    config,
     mapping,
     sourceFileName: record.file_name,
     analyzedRowCount: record.row_count,
@@ -81,27 +95,31 @@ export async function buildIntelligenceReportFromImport(
       .filter((profile): profile is NonNullable<typeof profile> => !!profile),
     summary: {
       totalDoors: doors.length,
-      doorsWithViolations,
+      doorsWithViolations: doors.filter((door) => door.totalIncidents > 0).length,
       totalFireExitEvents,
       totalHeldOpenEvents,
       totalExposureSeconds,
       totalExposureLabel: formatExposureLabel(totalExposureSeconds),
       overallComplianceScore,
-      excellentDoors,
-      doorsNeedingAttention,
-      criticalDoors,
-      worstDoor,
-      hasDurationField: record.has_duration_field ?? snapshot?.hasDurationField ?? false,
+      excellentDoors: doors.filter((door) => door.status === "Excellent").length,
+      doorsNeedingAttention: doors.filter(
+        (door) => door.status === "Needs Attention",
+      ).length,
+      criticalDoors: doors.filter((door) => door.status === "Critical").length,
+      worstDoor:
+        [...doors].sort(
+          (a, b) => a.complianceScore - b.complianceScore,
+        )[0]?.door ?? "N/A",
+      hasDurationField: record.has_duration_field ?? false,
     },
-  };
-
-  return normalizeIntelligenceReport(report);
+  });
 }
 
 export async function buildImportAnalysisSnapshotFromImport(
   record: ServerImportRecord,
+  config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
 ): Promise<ImportAnalysisSnapshot | null> {
-  const intelligence = await buildIntelligenceReportFromImport(record);
+  const intelligence = await buildIntelligenceReportFromImport(record, config);
 
   if (!intelligence) {
     return null;

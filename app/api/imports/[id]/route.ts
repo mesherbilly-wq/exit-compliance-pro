@@ -5,6 +5,7 @@ import {
 } from "@/lib/server/imports/import-service";
 import { deleteServerImport, getServerImportById } from "@/lib/server/db/inbound-email-repository";
 import { buildImportAnalysisSnapshotFromImport } from "@/lib/server/imports/build-intelligence-from-db";
+import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import {
   getSupabaseStorageBucket,
   isSupabaseConfigured,
@@ -68,7 +69,10 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Import not found." }, { status: 404 });
     }
 
-    const analysisSnapshot = await buildImportAnalysisSnapshotFromImport(record);
+    const analysisSnapshot = await buildImportAnalysisSnapshotFromImport(
+      record,
+      DEFAULT_ANALYTICS_CONFIG,
+    );
 
     return NextResponse.json({
       import: {

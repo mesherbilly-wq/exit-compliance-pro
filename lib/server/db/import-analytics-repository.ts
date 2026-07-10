@@ -210,6 +210,38 @@ export async function loadParsedEventsForImport(
   }));
 }
 
+export async function loadIncidentsForImport(
+  importId: string,
+): Promise<ComplianceIncident[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("import_incidents")
+    .select("*")
+    .eq("import_id", importId)
+    .order("start_timestamp", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load incidents: ${error.message}`);
+  }
+
+  return ((data as ImportIncidentRow[]) ?? []).map((row) => ({
+    door: row.door,
+    startTimestamp: row.start_timestamp,
+    endTimestamp: row.end_timestamp,
+    startTimeLabel: row.start_time_label,
+    endTimeLabel: row.end_time_label,
+    durationSeconds: row.duration_seconds,
+    thresholdSeconds: row.threshold_seconds,
+    timeBeyondThresholdSeconds: row.time_beyond_threshold_seconds,
+    riskRating: row.risk_rating as ComplianceIncident["riskRating"],
+    durationBucket: row.duration_bucket as ComplianceIncident["durationBucket"],
+    dayStarted: row.day_started,
+    hourStarted: row.hour_started,
+    isExplicitAlarm: row.is_explicit_alarm,
+    eventType: row.event_type,
+  }));
+}
+
 export async function loadDoorProfilesForImport(
   importId: string,
 ): Promise<DoorIntelligenceProfile[]> {

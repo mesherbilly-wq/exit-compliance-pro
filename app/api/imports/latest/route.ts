@@ -1,11 +1,24 @@
 import { NextResponse } from "next/server";
 import { getLatestImportForAnalytics } from "@/lib/server/db/latest-import";
 import { buildImportAnalysisSnapshotFromImport } from "@/lib/server/imports/build-intelligence-from-db";
+import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import { isSupabaseConfigured } from "@/lib/server/env";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+function parseThreshold(request: Request): number {
+  const url = new URL(request.url);
+  const raw = url.searchParams.get("heldOpenThresholdSeconds");
+  const threshold = Number(raw);
+
+  if (Number.isFinite(threshold) && threshold > 0) {
+    return threshold;
+  }
+
+  return DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds;
+}
+
+export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ import: null, configured: false });
   }
@@ -16,7 +29,14 @@ export async function GET() {
       return NextResponse.json({ import: null, configured: true });
     }
 
-    const analysisSnapshot = await buildImportAnalysisSnapshotFromImport(record);
+    const config = {
+      heldOpenThresholdSeconds: parseThreshold(request),
+    };
+
+    const analysisSnapshot = await buildImportAnalysisSnapshotFromImport(
+      record,
+      config,
+    );
 
     if (!analysisSnapshot) {
       return NextResponse.json({ import: null, configured: true });
@@ -38,9 +58,10 @@ export async function GET() {
         reportingPeriodStart: record.reporting_period_start,
         reportingPeriodEnd: record.reporting_period_end,
         processingDurationMs: record.processing_duration_ms,
-        doorCount: record.door_count,
-        incidentCount: record.incident_count,
-        complianceScoreSnapshot: record.compliance_score_snapshot,
+        doorCount: analysisSnapshot.intelligence.summary.totalDoors,
+        incidentCount: analysisSnapshot.intelligence.summary.totalHeldOpenEvents,
+        complianceScoreSnapshot:
+          analysisSnapshot.intelligence.summary.overallComplianceScore,
       },
     });
   } catch (error) {

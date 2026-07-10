@@ -3,6 +3,7 @@ import type {
   ImportAnalysisSnapshot,
   ImportStatus,
 } from "@/lib/imports/types";
+import { getAnalyticsConfig } from "@/lib/analytics/config";
 import type { ServerImportListItem } from "@/lib/server/types/inbound-email";
 import type { ProcessingLogEntry } from "@/lib/server/types/import-management";
 import {
@@ -173,7 +174,10 @@ export async function refreshImportAnalysis(config: {
 }
 
 export async function fetchLatestImport(): Promise<ApiImportRecord | null> {
-  const response = await fetch("/api/imports/latest");
+  const config = getAnalyticsConfig();
+  const response = await fetch(
+    `/api/imports/latest?heldOpenThresholdSeconds=${config.heldOpenThresholdSeconds}`,
+  );
   if (!response.ok) {
     return null;
   }
