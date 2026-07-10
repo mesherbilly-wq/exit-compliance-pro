@@ -6,13 +6,18 @@ import type {
   ServerImportRecord,
   ServerImportStatus,
 } from "@/lib/server/types/inbound-email";
+import type { ProcessingLogEntry } from "@/lib/server/types/import-management";
+import { sourceToLabel } from "@/lib/server/types/import-management";
 
 function mapImportListItem(row: ServerImportRecord): ServerImportListItem {
+  const sender = row.sender ?? row.inbound_emails?.from_address ?? null;
+
   return {
     id: row.id,
     source: row.source,
+    sourceLabel: sourceToLabel(row.source),
     fileName: row.file_name,
-    sender: row.inbound_emails?.from_address ?? null,
+    sender,
     emailSubject: row.inbound_emails?.subject ?? null,
     receivedAt: row.inbound_emails?.received_at ?? row.created_at,
     status: row.status,
@@ -21,6 +26,58 @@ function mapImportListItem(row: ServerImportRecord): ServerImportListItem {
     headers: row.headers,
     processingResult: row.processing_result,
     createdAt: row.created_at,
+    reportingPeriodStart: row.reporting_period_start,
+    reportingPeriodEnd: row.reporting_period_end,
+    importedDate: row.created_at,
+    processingDurationMs: row.processing_duration_ms,
+    doorCount: row.door_count,
+    incidentCount: row.incident_count,
+    complianceScoreSnapshot:
+      row.compliance_score_snapshot !== null &&
+      row.compliance_score_snapshot !== undefined
+        ? Number(row.compliance_score_snapshot)
+        : null,
+    processingLog: row.processing_log ?? [],
+    errorCount: row.error_count ?? 0,
+    hasAnalytics: row.has_analytics ?? false,
+    failedCsvAvailable: Boolean(row.failed_csv_path),
+  };
+}
+
+function mapImportRecord(row: Record<string, unknown>): ServerImportRecord {
+  return {
+    id: row.id as string,
+    source: row.source as ServerImportRecord["source"],
+    file_name: row.file_name as string,
+    original_file_path: (row.original_file_path as string | null) ?? null,
+    row_count: (row.row_count as number) ?? 0,
+    column_count: (row.column_count as number) ?? 0,
+    headers: (row.headers as string[]) ?? [],
+    field_mapping: (row.field_mapping as Record<string, string> | null) ?? null,
+    analysis_snapshot: row.analysis_snapshot ?? null,
+    status: row.status as ServerImportStatus,
+    inbound_email_id: (row.inbound_email_id as string | null) ?? null,
+    processing_result: (row.processing_result as string | null) ?? null,
+    created_at: row.created_at as string,
+    reporting_period_start: (row.reporting_period_start as string | null) ?? null,
+    reporting_period_end: (row.reporting_period_end as string | null) ?? null,
+    processing_duration_ms: (row.processing_duration_ms as number | null) ?? null,
+    sender: (row.sender as string | null) ?? null,
+    door_count: (row.door_count as number) ?? 0,
+    incident_count: (row.incident_count as number) ?? 0,
+    compliance_score_snapshot:
+      row.compliance_score_snapshot !== null &&
+      row.compliance_score_snapshot !== undefined
+        ? Number(row.compliance_score_snapshot)
+        : null,
+    processing_log: (row.processing_log as ProcessingLogEntry[]) ?? [],
+    error_count: (row.error_count as number) ?? 0,
+    failed_csv_path: (row.failed_csv_path as string | null) ?? null,
+    failed_csv_retention_until:
+      (row.failed_csv_retention_until as string | null) ?? null,
+    has_analytics: (row.has_analytics as boolean) ?? false,
+    has_duration_field: (row.has_duration_field as boolean) ?? false,
+    inbound_emails: row.inbound_emails as ServerImportRecord["inbound_emails"],
   };
 }
 
@@ -92,33 +149,39 @@ export async function updateInboundEmailStatus(
 }
 
 export async function createServerImport(input: {
+  id?: string;
   source: "manual_upload" | "inbound_email";
   fileName: string;
   originalFilePath?: string | null;
-  rowCount: number;
-  columnCount: number;
-  headers: string[];
+  rowCount?: number;
+  columnCount?: number;
+  headers?: string[];
   fieldMapping?: Record<string, string> | null;
   analysisSnapshot?: unknown | null;
   status: ServerImportStatus;
   inboundEmailId?: string | null;
   processingResult?: string | null;
+  sender?: string | null;
+  processingLog?: ProcessingLogEntry[];
 }): Promise<ServerImportRecord> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("imports")
     .insert({
+      ...(input.id ? { id: input.id } : {}),
       source: input.source,
       file_name: input.fileName,
       original_file_path: input.originalFilePath ?? null,
-      row_count: input.rowCount,
-      column_count: input.columnCount,
-      headers: input.headers,
+      row_count: input.rowCount ?? 0,
+      column_count: input.columnCount ?? 0,
+      headers: input.headers ?? [],
       field_mapping: input.fieldMapping ?? null,
       analysis_snapshot: input.analysisSnapshot ?? null,
       status: input.status,
       inbound_email_id: input.inboundEmailId ?? null,
       processing_result: input.processingResult ?? null,
+      sender: input.sender ?? null,
+      processing_log: input.processingLog ?? [],
     })
     .select("*")
     .single();
@@ -127,7 +190,7 @@ export async function createServerImport(input: {
     throw new Error(`Failed to create import record: ${error.message}`);
   }
 
-  return data as ServerImportRecord;
+  return mapImportRecord(data as Record<string, unknown>);
 }
 
 export async function listServerImports(): Promise<ServerImportListItem[]> {
@@ -153,7 +216,9 @@ export async function listServerImports(): Promise<ServerImportListItem[]> {
     throw new Error(`Failed to list server imports: ${error.message}`);
   }
 
-  return ((data as ServerImportRecord[]) ?? []).map(mapImportListItem);
+  return ((data as Record<string, unknown>[]) ?? []).map((row) =>
+    mapImportListItem(mapImportRecord(row)),
+  );
 }
 
 export async function getServerImportById(
@@ -162,7 +227,18 @@ export async function getServerImportById(
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("imports")
-    .select("*")
+    .select(
+      `
+      *,
+      inbound_emails (
+        from_address,
+        subject,
+        received_at,
+        status,
+        failure_reason
+      )
+    `,
+    )
     .eq("id", importId)
     .maybeSingle();
 
@@ -170,7 +246,7 @@ export async function getServerImportById(
     throw new Error(`Failed to load import: ${error.message}`);
   }
 
-  return (data as ServerImportRecord | null) ?? null;
+  return data ? mapImportRecord(data as Record<string, unknown>) : null;
 }
 
 export async function deleteServerImport(
@@ -184,11 +260,15 @@ export async function deleteServerImport(
   }
 
   const supabase = getSupabaseAdmin();
+  const paths = [
+    importRecord.original_file_path,
+    importRecord.failed_csv_path,
+  ].filter((path): path is string => Boolean(path));
 
-  if (importRecord.original_file_path) {
+  for (const path of paths) {
     const { error: storageError } = await supabase.storage
       .from(bucket)
-      .remove([importRecord.original_file_path]);
+      .remove([path]);
 
     if (storageError) {
       console.warn(
@@ -196,7 +276,7 @@ export async function deleteServerImport(
           scope: "imports-api",
           event: "storage-delete-warning",
           importId,
-          path: importRecord.original_file_path,
+          path,
           message: storageError.message,
         }),
       );
@@ -254,8 +334,9 @@ export async function getInboundEmailSummary(): Promise<{
 
   return {
     lastReceived: (lastReceivedResult.data as InboundEmailRecord | null) ?? null,
-    lastSuccessfulImport:
-      (lastSuccessImportResult.data as ServerImportRecord | null) ?? null,
+    lastSuccessfulImport: lastSuccessImportResult.data
+      ? mapImportRecord(lastSuccessImportResult.data as Record<string, unknown>)
+      : null,
     lastFailure: (lastFailureResult.data as InboundEmailRecord | null) ?? null,
   };
 }
@@ -267,6 +348,22 @@ export async function updateServerImport(
     analysisSnapshot?: unknown | null;
     status?: ServerImportStatus;
     processingResult?: string | null;
+    rowCount?: number;
+    columnCount?: number;
+    headers?: string[];
+    processingDurationMs?: number | null;
+    processingLog?: ProcessingLogEntry[];
+    errorCount?: number;
+    doorCount?: number;
+    incidentCount?: number;
+    complianceScoreSnapshot?: number | null;
+    reportingPeriodStart?: string | null;
+    reportingPeriodEnd?: string | null;
+    hasAnalytics?: boolean;
+    hasDurationField?: boolean;
+    originalFilePath?: string | null;
+    failedCsvPath?: string | null;
+    failedCsvRetentionUntil?: string | null;
   },
 ): Promise<ServerImportRecord> {
   const supabase = getSupabaseAdmin();
@@ -277,6 +374,22 @@ export async function updateServerImport(
       analysis_snapshot: input.analysisSnapshot,
       status: input.status,
       processing_result: input.processingResult,
+      row_count: input.rowCount,
+      column_count: input.columnCount,
+      headers: input.headers,
+      processing_duration_ms: input.processingDurationMs,
+      processing_log: input.processingLog,
+      error_count: input.errorCount,
+      door_count: input.doorCount,
+      incident_count: input.incidentCount,
+      compliance_score_snapshot: input.complianceScoreSnapshot,
+      reporting_period_start: input.reportingPeriodStart,
+      reporting_period_end: input.reportingPeriodEnd,
+      has_analytics: input.hasAnalytics,
+      has_duration_field: input.hasDurationField,
+      original_file_path: input.originalFilePath,
+      failed_csv_path: input.failedCsvPath,
+      failed_csv_retention_until: input.failedCsvRetentionUntil,
     })
     .eq("id", importId)
     .select("*")
@@ -286,7 +399,7 @@ export async function updateServerImport(
     throw new Error(`Failed to update import: ${error.message}`);
   }
 
-  return data as ServerImportRecord;
+  return mapImportRecord(data as Record<string, unknown>);
 }
 
 export async function downloadCsvFromStorage(
@@ -303,19 +416,42 @@ export async function downloadCsvFromStorage(
   return data.text();
 }
 
-export async function listImportsWithAnalysisSnapshot(): Promise<ServerImportRecord[]> {
+export async function deleteCsvFromStorage(
+  storagePath: string,
+  bucket: string,
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.storage.from(bucket).remove([storagePath]);
+
+  if (error) {
+    console.warn(
+      JSON.stringify({
+        scope: "imports-storage",
+        event: "delete-warning",
+        path: storagePath,
+        message: error.message,
+      }),
+    );
+  }
+}
+
+export async function listImportsWithAnalytics(): Promise<ServerImportRecord[]> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("imports")
     .select("*")
-    .not("analysis_snapshot", "is", null)
+    .eq("has_analytics", true)
     .order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(`Failed to list imports for refresh: ${error.message}`);
   }
 
-  return (data as ServerImportRecord[]) ?? [];
+  return ((data as Record<string, unknown>[]) ?? []).map(mapImportRecord);
+}
+
+export async function listImportsWithAnalysisSnapshot(): Promise<ServerImportRecord[]> {
+  return listImportsWithAnalytics();
 }
 
 export async function uploadCsvToStorage(

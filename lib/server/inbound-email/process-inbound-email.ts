@@ -1,10 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { getServerEnv } from "@/lib/server/env";
 import {
   createInboundEmail,
-  createServerImport,
   findInboundEmailByProviderId,
   updateInboundEmailStatus,
-  uploadCsvToStorage,
 } from "@/lib/server/db/inbound-email-repository";
 import {
   downloadAttachmentText,
@@ -17,7 +16,7 @@ import {
   sanitizeAttachmentFileName,
   type AttachmentCandidate,
 } from "@/lib/server/inbound-email/attachment-validation";
-import { processCsvImport } from "@/lib/server/imports/process-csv-import";
+import { completeImportProcessing } from "@/lib/server/imports/import-processor";
 import type { InboundEmailStatus } from "@/lib/server/types/inbound-email";
 
 export type ResendEmailReceivedEvent = {
@@ -166,65 +165,52 @@ export async function processInboundEmailEvent(
     }
 
     const safeFileName = sanitizeAttachmentFileName(csvAttachment.filename);
-    const importResult = processCsvImport({
+    const importRecord = await completeImportProcessing({
+      importId: randomUUID(),
       fileName: safeFileName,
       csvText,
       source: "inbound_email",
+      sender: event.data.from,
+      inboundEmailId,
     });
 
-    const storagePath = `inbound/${providerEmailId}/${safeFileName}`;
-
-    if (!importResult.ok) {
-      await updateInboundEmailStatus(
+    if (importRecord.status === "processed" || importRecord.status === "mapped") {
+      await updateInboundEmailStatus(inboundEmailId, "processed");
+      logInbound("processed", {
+        providerEmailId,
         inboundEmailId,
-        importResult.status,
-        importResult.reason,
-      );
-      logInbound("failed", {
-        providerEmailId,
-        reason: importResult.reason,
+        importId: importRecord.id,
+        rowCount: importRecord.row_count,
       });
+
       return {
-        ok: false,
+        ok: true,
+        idempotent: false,
         providerEmailId,
-        status: importResult.status,
-        message: importResult.reason,
+        inboundEmailId,
+        importId: importRecord.id,
+        status: "processed",
+        message: importRecord.processing_result ?? "Import processed.",
       };
     }
 
-    await uploadCsvToStorage(storagePath, csvText, env.supabaseStorageBucket);
-
-    const importRecord = await createServerImport({
-      source: "inbound_email",
-      fileName: safeFileName,
-      originalFilePath: storagePath,
-      rowCount: importResult.rowCount,
-      columnCount: importResult.columnCount,
-      headers: importResult.headers,
-      fieldMapping: importResult.analysisSnapshot.mapping,
-      analysisSnapshot: importResult.analysisSnapshot,
-      status: importResult.status,
+    await updateInboundEmailStatus(
       inboundEmailId,
-      processingResult: importResult.processingResult,
-    });
+      importRecord.status === "rejected" ? "rejected" : "failed",
+      importRecord.processing_result,
+    );
 
-    await updateInboundEmailStatus(inboundEmailId, "processed");
-
-    logInbound("processed", {
+    logInbound("failed", {
       providerEmailId,
-      inboundEmailId,
       importId: importRecord.id,
-      rowCount: importResult.rowCount,
+      reason: importRecord.processing_result,
     });
 
     return {
-      ok: true,
-      idempotent: false,
+      ok: false,
       providerEmailId,
-      inboundEmailId,
-      importId: importRecord.id,
-      status: "processed",
-      message: importResult.processingResult,
+      status: importRecord.status === "rejected" ? "rejected" : "failed",
+      message: importRecord.processing_result ?? "Import failed.",
     };
   } catch (error) {
     const reason =

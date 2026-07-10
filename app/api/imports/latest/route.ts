@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getLatestImportForAnalytics } from "@/lib/server/db/latest-import";
+import { buildImportAnalysisSnapshotFromImport } from "@/lib/server/imports/build-intelligence-from-db";
 import { isSupabaseConfigured } from "@/lib/server/env";
-import type { ImportAnalysisSnapshot } from "@/lib/imports/types";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,13 @@ export async function GET() {
 
   try {
     const record = await getLatestImportForAnalytics();
-    if (!record?.analysis_snapshot) {
+    if (!record) {
+      return NextResponse.json({ import: null, configured: true });
+    }
+
+    const analysisSnapshot = await buildImportAnalysisSnapshotFromImport(record);
+
+    if (!analysisSnapshot) {
       return NextResponse.json({ import: null, configured: true });
     }
 
@@ -27,7 +33,14 @@ export async function GET() {
         status: record.status,
         uploadedAt: record.created_at,
         source: record.source,
-        analysisSnapshot: record.analysis_snapshot as ImportAnalysisSnapshot,
+        sender: record.sender,
+        analysisSnapshot,
+        reportingPeriodStart: record.reporting_period_start,
+        reportingPeriodEnd: record.reporting_period_end,
+        processingDurationMs: record.processing_duration_ms,
+        doorCount: record.door_count,
+        incidentCount: record.incident_count,
+        complianceScoreSnapshot: record.compliance_score_snapshot,
       },
     });
   } catch (error) {

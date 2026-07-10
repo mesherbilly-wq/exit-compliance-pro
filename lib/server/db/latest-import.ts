@@ -6,7 +6,7 @@ export async function getLatestImportForAnalytics(): Promise<ServerImportRecord 
   const { data, error } = await supabase
     .from("imports")
     .select("*")
-    .not("analysis_snapshot", "is", null)
+    .eq("has_analytics", true)
     .in("status", ["processed", "mapped"])
     .order("created_at", { ascending: false })
     .limit(1)
@@ -16,7 +16,24 @@ export async function getLatestImportForAnalytics(): Promise<ServerImportRecord 
     throw new Error(`Failed to load latest server import: ${error.message}`);
   }
 
-  return (data as ServerImportRecord | null) ?? null;
+  if (!data) {
+    const { data: legacyData, error: legacyError } = await supabase
+      .from("imports")
+      .select("*")
+      .not("analysis_snapshot", "is", null)
+      .in("status", ["processed", "mapped"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (legacyError) {
+      throw new Error(`Failed to load latest server import: ${legacyError.message}`);
+    }
+
+    return (legacyData as ServerImportRecord | null) ?? null;
+  }
+
+  return data as ServerImportRecord;
 }
 
 export async function getLatestProcessedServerImport(): Promise<ServerImportRecord | null> {

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import { createManualCsvImport } from "@/lib/server/imports/import-service";
+import { buildImportAnalysisSnapshotFromImport } from "@/lib/server/imports/build-intelligence-from-db";
+import { mapServerImportRecord } from "@/lib/client/import-types";
 import { isSupabaseConfigured } from "@/lib/server/env";
 import { looksLikeCsvContent } from "@/lib/server/inbound-email/attachment-validation";
 
@@ -57,19 +59,10 @@ export async function POST(request: Request) {
       config: DEFAULT_ANALYTICS_CONFIG,
     });
 
+    const analysisSnapshot = await buildImportAnalysisSnapshotFromImport(record);
+
     return NextResponse.json({
-      import: {
-        id: record.id,
-        fileName: record.file_name,
-        rowCount: record.row_count,
-        columnCount: record.column_count,
-        headers: record.headers,
-        status: record.status,
-        uploadedAt: record.created_at,
-        source: record.source,
-        analysisSnapshot: record.analysis_snapshot,
-        processingResult: record.processing_result,
-      },
+      import: mapServerImportRecord(record, analysisSnapshot ?? undefined),
     });
   } catch (error) {
     console.error(

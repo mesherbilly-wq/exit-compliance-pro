@@ -77,7 +77,11 @@ export function ImportsPageContent() {
           </Link>
         </div>
 
-        <RecentImportsTable imports={imports} onDelete={handleDeleteImport} />
+        <RecentImportsTable
+          imports={imports}
+          onDelete={handleDeleteImport}
+          onRefresh={reload}
+        />
       </section>
     </div>
   );

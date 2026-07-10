@@ -1,70 +1,16 @@
 import type {
   FieldMapping,
   ImportAnalysisSnapshot,
-  ImportRecord,
   ImportStatus,
 } from "@/lib/imports/types";
-import type {
-  ServerImportListItem,
-  ServerImportSource,
-} from "@/lib/server/types/inbound-email";
+import type { ServerImportListItem } from "@/lib/server/types/inbound-email";
+import type { ProcessingLogEntry } from "@/lib/server/types/import-management";
+import {
+  mapServerImportListItem,
+  type ApiImportRecord,
+} from "@/lib/client/import-types";
 
-export type ApiImportRecord = ImportRecord & {
-  source: ServerImportSource;
-  sender: string | null;
-  emailSubject: string | null;
-  processingResult: string | null;
-};
-
-type ApiImportPayload = {
-  id: string;
-  fileName: string;
-  rowCount: number;
-  columnCount: number;
-  headers: string[];
-  status: ImportStatus;
-  uploadedAt: string;
-  source: ServerImportSource;
-  analysisSnapshot?: ImportAnalysisSnapshot;
-  processingResult?: string | null;
-  sender?: string | null;
-  emailSubject?: string | null;
-};
-
-function mapApiImport(payload: ApiImportPayload): ApiImportRecord {
-  return {
-    id: payload.id,
-    fileName: payload.fileName,
-    rowCount: payload.rowCount,
-    columnCount: payload.columnCount,
-    headers: payload.headers,
-    status: payload.status,
-    uploadedAt: payload.uploadedAt,
-    previewRows: [],
-    analysisSnapshot: payload.analysisSnapshot,
-    source: payload.source,
-    sender: payload.sender ?? null,
-    emailSubject: payload.emailSubject ?? null,
-    processingResult: payload.processingResult ?? null,
-  };
-}
-
-export function mapServerImportListItem(item: ServerImportListItem): ApiImportRecord {
-  return {
-    id: item.id,
-    fileName: item.fileName,
-    rowCount: item.rowCount,
-    columnCount: item.columnCount,
-    headers: item.headers,
-    status: item.status as ImportStatus,
-    uploadedAt: item.receivedAt ?? item.createdAt,
-    previewRows: [],
-    source: item.source,
-    sender: item.sender,
-    emailSubject: item.emailSubject,
-    processingResult: item.processingResult,
-  };
-}
+export type { ApiImportRecord };
 
 export async function fetchImports(): Promise<ApiImportRecord[]> {
   const response = await fetch("/api/imports");
@@ -78,6 +24,73 @@ export async function fetchImports(): Promise<ApiImportRecord[]> {
   };
 
   return (payload.imports ?? []).map(mapServerImportListItem);
+}
+
+export async function fetchImportById(importId: string): Promise<ApiImportRecord> {
+  const response = await fetch(`/api/imports/${importId}`);
+  if (!response.ok) {
+    const payload = (await response.json()) as { error?: string };
+    throw new Error(payload.error ?? "Failed to load import.");
+  }
+
+  const payload = (await response.json()) as {
+    import: ApiImportRecord & { analysisSnapshot?: ImportAnalysisSnapshot };
+  };
+
+  return payload.import;
+}
+
+export async function fetchImportProcessingLog(importId: string): Promise<{
+  importId: string;
+  processingLog: ProcessingLogEntry[];
+  errorCount: number;
+}> {
+  const response = await fetch(`/api/imports/${importId}/log`);
+  if (!response.ok) {
+    const payload = (await response.json()) as { error?: string };
+    throw new Error(payload.error ?? "Failed to load processing log.");
+  }
+
+  return (await response.json()) as {
+    importId: string;
+    processingLog: ProcessingLogEntry[];
+    errorCount: number;
+  };
+}
+
+export async function reprocessImportById(importId: string): Promise<ApiImportRecord> {
+  const response = await fetch(`/api/imports/${importId}/reprocess`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json()) as { error?: string };
+    throw new Error(payload.error ?? "Reprocess failed.");
+  }
+
+  const payload = (await response.json()) as {
+    import: Partial<ApiImportRecord> & { id: string };
+  };
+
+  const existing = await fetchImportById(importId);
+  return { ...existing, ...payload.import };
+}
+
+export async function downloadFailedImportCsv(importId: string): Promise<void> {
+  const response = await fetch(`/api/imports/${importId}/download`);
+  if (!response.ok) {
+    const payload = (await response.json()) as { error?: string };
+    throw new Error(payload.error ?? "Download failed.");
+  }
+
+  const blob = await response.blob();
+  const importRecord = await fetchImportById(importId);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = importRecord.fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function uploadManualImport(file: File): Promise<ApiImportRecord> {
@@ -94,8 +107,8 @@ export async function uploadManualImport(file: File): Promise<ApiImportRecord> {
     throw new Error(payload.error ?? "Upload failed.");
   }
 
-  const payload = (await response.json()) as { import: ApiImportPayload };
-  return mapApiImport(payload.import);
+  const payload = (await response.json()) as { import: ApiImportRecord };
+  return payload.import;
 }
 
 export async function deleteImportById(importId: string): Promise<void> {
@@ -166,10 +179,10 @@ export async function fetchLatestImport(): Promise<ApiImportRecord | null> {
   }
 
   const payload = (await response.json()) as {
-    import: ApiImportPayload | null;
+    import: ApiImportRecord | null;
   };
 
-  return payload.import ? mapApiImport(payload.import) : null;
+  return payload.import ?? null;
 }
 
 export function getImportStats(imports: ApiImportRecord[]) {
@@ -179,5 +192,33 @@ export function getImportStats(imports: ApiImportRecord[]) {
       .length,
     mapped: imports.filter((item) => item.status === "mapped").length,
     processed: imports.filter((item) => item.status === "processed").length,
+    failed: imports.filter((item) => item.status === "failed").length,
   };
 }
+
+function formatReportingPeriod(
+  start: string | null,
+  end: string | null,
+): string {
+  if (!start && !end) {
+    return "—";
+  }
+
+  const startLabel = start ? new Date(start).toLocaleDateString() : "?";
+  const endLabel = end ? new Date(end).toLocaleDateString() : "?";
+  return `${startLabel} – ${endLabel}`;
+}
+
+export function formatProcessingDuration(ms: number | null): string {
+  if (ms === null || ms === undefined) {
+    return "—";
+  }
+
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+export { formatReportingPeriod };

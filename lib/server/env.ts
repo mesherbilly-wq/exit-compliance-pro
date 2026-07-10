@@ -61,3 +61,12 @@ export function isInboundEmailConfigured(): boolean {
       process.env.INBOUND_REPORT_EMAIL,
   );
 }
+
+const DEFAULT_FAILED_CSV_RETENTION_DAYS = 7;
+
+export function getFailedCsvRetentionDays(): number {
+  const value = Number(process.env.FAILED_CSV_RETENTION_DAYS ?? DEFAULT_FAILED_CSV_RETENTION_DAYS);
+  return Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_FAILED_CSV_RETENTION_DAYS;
+}

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/inbound-email/resend/route";
 import * as repository from "@/lib/server/db/inbound-email-repository";
 import * as resendClient from "@/lib/server/inbound-email/resend-client";
+import * as importProcessor from "@/lib/server/imports/import-processor";
 import { processInboundEmailEvent } from "@/lib/server/inbound-email/process-inbound-email";
 
 const fixturesDir = path.join(__dirname, "..", "__tests__", "fixtures");
@@ -24,9 +25,44 @@ const baseEvent = {
   },
 };
 
+const mockImportRecord = {
+  id: "import-1",
+  source: "inbound_email" as const,
+  file_name: "genetec-headered.csv",
+  original_file_path: null,
+  row_count: 3,
+  column_count: 3,
+  headers: ["Event Time", "Event Type", "Door Name"],
+  field_mapping: {},
+  analysis_snapshot: null,
+  status: "processed" as const,
+  inbound_email_id: "inbound-1",
+  processing_result: "Processed 3 rows through fire exit analytics.",
+  created_at: baseEvent.created_at,
+  reporting_period_start: null,
+  reporting_period_end: null,
+  processing_duration_ms: 120,
+  sender: "genetec@example.com",
+  door_count: 1,
+  incident_count: 0,
+  compliance_score_snapshot: 100,
+  processing_log: [],
+  error_count: 0,
+  failed_csv_path: null,
+  failed_csv_retention_until: null,
+  has_analytics: true,
+  has_duration_field: false,
+};
+
 describe("processInboundEmailEvent", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    process.env.RESEND_API_KEY = "test-key";
+    process.env.RESEND_WEBHOOK_SECRET = "test-secret";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-test-key";
+    process.env.SUPABASE_STORAGE_BUCKET = "inbound-csv";
+    process.env.INBOUND_REPORT_EMAIL = "reports@inbound.example.com";
   });
 
   it("processes a valid CSV attachment end-to-end", async () => {
@@ -61,22 +97,9 @@ describe("processInboundEmailEvent", () => {
     vi.spyOn(resendClient, "downloadAttachmentText").mockResolvedValue(
       readFixture("genetec-headered.csv"),
     );
-    vi.spyOn(repository, "uploadCsvToStorage").mockResolvedValue(undefined);
-    vi.spyOn(repository, "createServerImport").mockResolvedValue({
-      id: "import-1",
-      source: "inbound_email",
-      file_name: "genetec-headered.csv",
-      original_file_path: "inbound/email-123/genetec-headered.csv",
-      row_count: 3,
-      column_count: 3,
-      headers: ["Event Time", "Event Type", "Door Name"],
-      field_mapping: {},
-      analysis_snapshot: {},
-      status: "processed",
-      inbound_email_id: "inbound-1",
-      processing_result: "Processed 3 rows through fire exit analytics.",
-      created_at: baseEvent.created_at,
-    });
+    vi.spyOn(importProcessor, "completeImportProcessing").mockResolvedValue(
+      mockImportRecord,
+    );
     vi.spyOn(repository, "updateInboundEmailStatus").mockResolvedValue(undefined);
 
     const result = await processInboundEmailEvent(baseEvent);

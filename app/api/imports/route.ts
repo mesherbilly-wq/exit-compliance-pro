@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listServerImports } from "@/lib/server/db/inbound-email-repository";
+import { cleanupExpiredFailedCsvs } from "@/lib/server/imports/import-processor";
 import { isSupabaseConfigured } from "@/lib/server/env";
 
 export const runtime = "nodejs";
@@ -10,6 +11,7 @@ export async function GET() {
   }
 
   try {
+    await cleanupExpiredFailedCsvs().catch(() => 0);
     const imports = await listServerImports();
     return NextResponse.json({ configured: true, imports });
   } catch (error) {

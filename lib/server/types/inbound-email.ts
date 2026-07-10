@@ -1,3 +1,5 @@
+import type { ProcessingLogEntry } from "@/lib/server/types/import-management";
+
 export type InboundEmailStatus = "processing" | "processed" | "rejected" | "failed";
 
 export type ServerImportSource = "manual_upload" | "inbound_email";
@@ -36,6 +38,19 @@ export type ServerImportRecord = {
   inbound_email_id: string | null;
   processing_result: string | null;
   created_at: string;
+  reporting_period_start: string | null;
+  reporting_period_end: string | null;
+  processing_duration_ms: number | null;
+  sender: string | null;
+  door_count: number;
+  incident_count: number;
+  compliance_score_snapshot: number | null;
+  processing_log: ProcessingLogEntry[];
+  error_count: number;
+  failed_csv_path: string | null;
+  failed_csv_retention_until: string | null;
+  has_analytics: boolean;
+  has_duration_field: boolean;
   inbound_emails?: {
     from_address: string;
     subject: string | null;
@@ -48,6 +63,7 @@ export type ServerImportRecord = {
 export type ServerImportListItem = {
   id: string;
   source: ServerImportSource;
+  sourceLabel: "Email" | "Manual";
   fileName: string;
   sender: string | null;
   emailSubject: string | null;
@@ -58,4 +74,15 @@ export type ServerImportListItem = {
   headers: string[];
   processingResult: string | null;
   createdAt: string;
+  reportingPeriodStart: string | null;
+  reportingPeriodEnd: string | null;
+  importedDate: string;
+  processingDurationMs: number | null;
+  doorCount: number;
+  incidentCount: number;
+  complianceScoreSnapshot: number | null;
+  processingLog: ProcessingLogEntry[];
+  errorCount: number;
+  hasAnalytics: boolean;
+  failedCsvAvailable: boolean;
 };
