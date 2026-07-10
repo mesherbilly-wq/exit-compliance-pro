@@ -11,6 +11,7 @@ export type ProcessCsvImportInput = {
   csvText: string;
   source: ServerImportSource;
   config?: FireExitAnalyticsConfig;
+  requireCompleteMapping?: boolean;
 };
 
 export type ProcessCsvImportSuccess = {
@@ -79,7 +80,9 @@ export function processCsvImport(
   }
 
   const mappingComplete = areRequiredFieldsMapped(analysisSnapshot.mapping);
-  if (!mappingComplete) {
+  const requireCompleteMapping = input.requireCompleteMapping ?? true;
+
+  if (requireCompleteMapping && !mappingComplete) {
     return {
       ok: false,
       reason:
@@ -88,13 +91,19 @@ export function processCsvImport(
     };
   }
 
+  const status: ServerImportStatus = mappingComplete
+    ? "processed"
+    : "ready_for_mapping";
+
   return {
     ok: true,
     headers: parsed.headers,
     rowCount: parsed.rows.length,
     columnCount: parsed.headers.length,
     analysisSnapshot,
-    status: "processed",
-    processingResult: `Processed ${parsed.rows.length.toLocaleString()} rows through fire exit analytics.`,
+    status,
+    processingResult: mappingComplete
+      ? `Processed ${parsed.rows.length.toLocaleString()} rows through fire exit analytics.`
+      : `Uploaded ${parsed.rows.length.toLocaleString()} rows. Field mapping required.`,
   };
 }

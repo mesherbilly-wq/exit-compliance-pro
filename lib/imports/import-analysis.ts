@@ -55,12 +55,13 @@ export function rebuildImportAnalysisWithCurrentConfig(
   snapshot: ImportAnalysisSnapshot,
   headers: string[],
   fileName: string,
+  config?: FireExitAnalyticsConfig,
 ): ImportAnalysisSnapshot | null {
   const refreshed = refreshIntelligenceReportWithConfig(
     snapshot,
     headers,
     fileName,
-    getAnalyticsConfig(),
+    config ?? getAnalyticsConfig(),
   );
 
   if (!refreshed) {

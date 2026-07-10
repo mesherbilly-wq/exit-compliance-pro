@@ -1,12 +1,13 @@
 import { getSupabaseAdmin } from "@/lib/server/supabase/admin";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 
-export async function getLatestProcessedServerImport(): Promise<ServerImportRecord | null> {
+export async function getLatestImportForAnalytics(): Promise<ServerImportRecord | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("imports")
     .select("*")
-    .eq("status", "processed")
+    .not("analysis_snapshot", "is", null)
+    .in("status", ["processed", "mapped"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -16,4 +17,8 @@ export async function getLatestProcessedServerImport(): Promise<ServerImportReco
   }
 
   return (data as ServerImportRecord | null) ?? null;
+}
+
+export async function getLatestProcessedServerImport(): Promise<ServerImportRecord | null> {
+  return getLatestImportForAnalytics();
 }

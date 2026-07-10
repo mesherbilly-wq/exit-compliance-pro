@@ -1,4 +1,10 @@
-export type ImportStatus = "ready_for_mapping" | "mapped" | "processed";
+export type ImportStatus =
+  | "ready_for_mapping"
+  | "mapped"
+  | "processed"
+  | "processing"
+  | "rejected"
+  | "failed";
 
 export type CsvRow = Record<string, string>;
 
@@ -92,4 +98,7 @@ export const IMPORT_STATUS_LABELS: Record<ImportStatus, string> = {
   ready_for_mapping: "Ready for mapping",
   mapped: "Mapped",
   processed: "Processed",
+  processing: "Processing",
+  rejected: "Rejected",
+  failed: "Failed",
 };

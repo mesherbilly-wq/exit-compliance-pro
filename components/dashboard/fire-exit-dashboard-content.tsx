@@ -12,9 +12,6 @@ import type { DoorComplianceStatus } from "@/lib/reports/held-open-detection";
 import { useLatestImport } from "@/lib/client/latest-import";
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
-import {
-  getFieldMapping,
-} from "@/lib/imports/storage";
 import type { FieldMapping } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import {
@@ -42,11 +39,7 @@ export function FireExitDashboardContent() {
     const rows = loadedImport?.rows ?? [];
     return (
       importRecord.analysisSnapshot?.mapping ??
-      resolveFieldMapping(
-        importRecord.headers,
-        rows,
-        getFieldMapping(importRecord.id),
-      )
+      resolveFieldMapping(importRecord.headers, rows, null)
     );
   }, [importRecord, loadedImport?.rows]);
 

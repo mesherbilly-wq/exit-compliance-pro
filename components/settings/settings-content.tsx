@@ -7,18 +7,17 @@ import {
   saveAnalyticsConfig,
 } from "@/lib/analytics/config";
 import { formatDurationReadable } from "@/lib/reports/held-open-detection";
-import { refreshAllImportAnalysisSnapshots } from "@/lib/imports/storage";
+import { refreshImportAnalysis } from "@/lib/client/imports-api";
 import { dispatchImportsRefreshed } from "@/lib/imports/imports-refreshed";
 import { InboundEmailSettingsPanel } from "@/components/settings/inbound-email-settings-panel";
 
 function buildRefreshMessage(result: {
   refreshed: number;
   skipped: number;
-  previewFallback: number;
 }): string {
   if (result.refreshed === 0) {
     if (result.skipped > 0) {
-      return "Settings saved. Re-upload your CSV to recalculate imports with the new threshold.";
+      return "Settings saved. No imports could be recalculated with the new threshold.";
     }
 
     return "Settings saved. No mapped imports were available to recalculate.";
@@ -30,13 +29,7 @@ function buildRefreshMessage(result: {
 
   if (result.skipped > 0) {
     parts.push(
-      `${result.skipped} import${result.skipped === 1 ? "" : "s"} could not be replayed — re-upload the CSV to apply the threshold to the full dataset.`,
-    );
-  }
-
-  if (result.previewFallback > 0) {
-    parts.push(
-      `${result.previewFallback} import${result.previewFallback === 1 ? "" : "s"} used preview data only.`,
+      `${result.skipped} import${result.skipped === 1 ? "" : "s"} could not be replayed.`,
     );
   }
 
@@ -85,15 +78,24 @@ export function SettingsContent() {
     setThresholdSeconds(Math.max(0, Math.min(59, seconds)));
   }
 
-  function handleSave(event: React.FormEvent) {
+  async function handleSave(event: React.FormEvent) {
     event.preventDefault();
     saveAnalyticsConfig({
       heldOpenThresholdSeconds: totalThresholdSeconds,
     });
-    const refreshResult = refreshAllImportAnalysisSnapshots();
-    dispatchImportsRefreshed();
-    setSaved(true);
-    setRefreshMessage(buildRefreshMessage(refreshResult));
+
+    try {
+      const refreshResult = await refreshImportAnalysis({
+        heldOpenThresholdSeconds: totalThresholdSeconds,
+      });
+      dispatchImportsRefreshed();
+      setSaved(true);
+      setRefreshMessage(buildRefreshMessage(refreshResult));
+    } catch {
+      setSaved(true);
+      setRefreshMessage("Settings saved, but import recalculation failed.");
+    }
+
     window.setTimeout(() => {
       setSaved(false);
       setRefreshMessage(null);

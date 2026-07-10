@@ -11,9 +11,6 @@ import {
 } from "@/lib/analytics/heat-maps";
 import { runFireExitIntelligenceEngine } from "@/lib/analytics/fire-exit-intelligence-engine";
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
-import {
-  getFieldMapping,
-} from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import type { FireExitIntelligenceReport } from "@/lib/analytics/types";
@@ -44,8 +41,7 @@ function buildHeatMapSource(
     return { importRecord: null, report: null, rows: [] };
   }
 
-  const savedMapping =
-    latest.analysisSnapshot?.mapping ?? getFieldMapping(latest.id);
+  const savedMapping = latest.analysisSnapshot?.mapping ?? null;
 
   if (latest.analysisSnapshot?.intelligence) {
     return {

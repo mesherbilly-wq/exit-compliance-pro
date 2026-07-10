@@ -1,15 +1,9 @@
-import type { FieldMapping, ImportRecord } from "@/lib/imports/types";
+import type { FieldMapping, ImportRecord } from "./types";
 import {
   buildImportAnalysis,
   doorHealthFromSnapshot,
-} from "@/lib/imports/import-analysis";
-import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
-import {
-  getFieldMapping,
-  getLatestImport,
-  getLatestImportData,
-  saveFieldMapping,
-} from "@/lib/imports/storage";
+} from "./import-analysis";
+import { resolveFieldMapping } from "./resolve-mapping";
 import {
   analyzeDoorHealth,
   canRunDoorHealthAnalysis,
@@ -20,15 +14,11 @@ export function getImportDoorHealthAnalysis(
   importRecord: ImportRecord,
   rows: Record<string, string>[],
 ): { analysis: DoorHealthAnalysis | null; mapping: FieldMapping | null } {
-  const savedMapping =
-    importRecord.analysisSnapshot?.mapping ??
-    getFieldMapping(importRecord.id);
+  const savedMapping = importRecord.analysisSnapshot?.mapping ?? null;
 
-  const mapping = resolveFieldMapping(
-    importRecord.headers,
-    rows,
-    savedMapping,
-  );
+  const mapping = savedMapping
+    ? savedMapping
+    : resolveFieldMapping(importRecord.headers, rows, null);
 
   if (importRecord.analysisSnapshot?.intelligence) {
     return {
@@ -52,38 +42,23 @@ export function getImportDoorHealthAnalysis(
   };
 }
 
-export function refreshImportDoorHealthAnalysis(
-  importRecord: ImportRecord,
-  rows: Record<string, string>[],
-  mapping: FieldMapping,
-): ImportRecord["analysisSnapshot"] {
-  const snapshot = buildImportAnalysis(
-    importRecord.headers,
-    rows,
-    importRecord.fileName,
-    mapping,
-  );
-
-  saveFieldMapping(importRecord.id, snapshot.mapping);
-  return snapshot;
-}
-
-export function loadLatestDoorHealthData(): {
+export function loadLatestDoorHealthData(
+  importRecord: ImportRecord | null,
+): {
   importRecord: ImportRecord | null;
   mapping: FieldMapping | null;
   rows: Record<string, string>[];
   analysis: DoorHealthAnalysis | null;
 } {
-  const latest = getLatestImport();
-  if (!latest) {
+  if (!importRecord) {
     return { importRecord: null, mapping: null, rows: [], analysis: null };
   }
 
-  const rows = getLatestImportData();
-  const { analysis, mapping } = getImportDoorHealthAnalysis(latest, rows);
+  const rows: Record<string, string>[] = [];
+  const { analysis, mapping } = getImportDoorHealthAnalysis(importRecord, rows);
 
   return {
-    importRecord: latest,
+    importRecord,
     mapping,
     rows,
     analysis,

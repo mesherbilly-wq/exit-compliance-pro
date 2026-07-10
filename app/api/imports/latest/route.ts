@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLatestProcessedServerImport } from "@/lib/server/db/latest-import";
+import { getLatestImportForAnalytics } from "@/lib/server/db/latest-import";
 import { isSupabaseConfigured } from "@/lib/server/env";
 import type { ImportAnalysisSnapshot } from "@/lib/imports/types";
 
@@ -11,7 +11,7 @@ export async function GET() {
   }
 
   try {
-    const record = await getLatestProcessedServerImport();
+    const record = await getLatestImportForAnalytics();
     if (!record?.analysis_snapshot) {
       return NextResponse.json({ import: null, configured: true });
     }

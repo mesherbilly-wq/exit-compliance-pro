@@ -17,6 +17,8 @@ function mapImportListItem(row: ServerImportRecord): ServerImportListItem {
     receivedAt: row.inbound_emails?.received_at ?? row.created_at,
     status: row.status,
     rowCount: row.row_count,
+    columnCount: row.column_count,
+    headers: row.headers,
     processingResult: row.processing_result,
     createdAt: row.created_at,
   };
@@ -144,7 +146,6 @@ export async function listServerImports(): Promise<ServerImportListItem[]> {
       )
     `,
     )
-    .eq("source", "inbound_email")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -180,10 +181,6 @@ export async function deleteServerImport(
 
   if (!importRecord) {
     throw new Error("Import not found.");
-  }
-
-  if (importRecord.source !== "inbound_email") {
-    throw new Error("Only inbound email imports can be deleted from this endpoint.");
   }
 
   const supabase = getSupabaseAdmin();
@@ -261,6 +258,64 @@ export async function getInboundEmailSummary(): Promise<{
       (lastSuccessImportResult.data as ServerImportRecord | null) ?? null,
     lastFailure: (lastFailureResult.data as InboundEmailRecord | null) ?? null,
   };
+}
+
+export async function updateServerImport(
+  importId: string,
+  input: {
+    fieldMapping?: Record<string, string> | null;
+    analysisSnapshot?: unknown | null;
+    status?: ServerImportStatus;
+    processingResult?: string | null;
+  },
+): Promise<ServerImportRecord> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("imports")
+    .update({
+      field_mapping: input.fieldMapping,
+      analysis_snapshot: input.analysisSnapshot,
+      status: input.status,
+      processing_result: input.processingResult,
+    })
+    .eq("id", importId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update import: ${error.message}`);
+  }
+
+  return data as ServerImportRecord;
+}
+
+export async function downloadCsvFromStorage(
+  storagePath: string,
+  bucket: string,
+): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.storage.from(bucket).download(storagePath);
+
+  if (error || !data) {
+    throw new Error(`Failed to download CSV from storage: ${error?.message ?? "Unknown error"}`);
+  }
+
+  return data.text();
+}
+
+export async function listImportsWithAnalysisSnapshot(): Promise<ServerImportRecord[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("imports")
+    .select("*")
+    .not("analysis_snapshot", "is", null)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to list imports for refresh: ${error.message}`);
+  }
+
+  return (data as ServerImportRecord[]) ?? [];
 }
 
 export async function uploadCsvToStorage(

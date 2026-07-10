@@ -54,6 +54,8 @@ export type ServerImportListItem = {
   receivedAt: string | null;
   status: ServerImportStatus;
   rowCount: number;
+  columnCount: number;
+  headers: string[];
   processingResult: string | null;
   createdAt: string;
 };

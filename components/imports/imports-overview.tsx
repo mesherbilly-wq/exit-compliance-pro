@@ -63,7 +63,7 @@ export function RecentImportsTable({ imports, onDelete }: RecentImportsTableProp
 
   function handleDelete(item: ImportRecord) {
     const confirmed = window.confirm(
-      `Delete "${item.fileName}"? This will remove the import and its field mapping from browser storage.`,
+      `Delete "${item.fileName}"? This will remove the import and its stored CSV from the server.`,
     );
 
     if (confirmed) {

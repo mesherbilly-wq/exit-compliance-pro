@@ -1,24 +1,43 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  deleteImportById,
+  fetchImports,
+  type ApiImportRecord,
+} from "@/lib/client/imports-api";
 import {
   ImportStatusCards,
   RecentImportsTable,
 } from "@/components/imports/imports-overview";
-import { InboundImportsTable } from "@/components/imports/inbound-imports-table";
-import { deleteImport, getRecentImports } from "@/lib/imports/storage";
-import type { ImportRecord } from "@/lib/imports/types";
 
 export function ImportsPageContent() {
-  const [imports, setImports] = useState<ImportRecord[]>([]);
+  const [imports, setImports] = useState<ApiImportRecord[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    setImports(getRecentImports());
+  const reload = useCallback(async () => {
+    try {
+      const records = await fetchImports();
+      setImports(records);
+    } catch {
+      setImports([]);
+    } finally {
+      setLoaded(true);
+    }
   }, []);
 
-  function handleDeleteImport(importId: string) {
-    setImports(deleteImport(importId));
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  async function handleDeleteImport(importId: string) {
+    await deleteImportById(importId);
+    setImports((current) => current.filter((item) => item.id !== importId));
+  }
+
+  if (!loaded) {
+    return <p className="text-sm text-slate-400">Loading imports...</p>;
   }
 
   return (
@@ -60,8 +79,6 @@ export function ImportsPageContent() {
 
         <RecentImportsTable imports={imports} onDelete={handleDeleteImport} />
       </section>
-
-      <InboundImportsTable />
     </div>
   );
 }

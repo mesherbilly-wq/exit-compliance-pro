@@ -9,9 +9,6 @@ import {
 } from "@/lib/analytics/compliance-intelligence";
 import { runFireExitIntelligenceEngine } from "@/lib/analytics/fire-exit-intelligence-engine";
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
-import {
-  getFieldMapping,
-} from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
@@ -48,8 +45,7 @@ function buildComplianceDashboard(
     return { importRecord: null, dashboard: null };
   }
 
-  const savedMapping =
-    latest.analysisSnapshot?.mapping ?? getFieldMapping(latest.id);
+  const savedMapping = latest.analysisSnapshot?.mapping ?? null;
 
   if (latest.analysisSnapshot?.intelligence) {
     return {

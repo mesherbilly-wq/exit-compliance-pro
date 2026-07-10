@@ -2,70 +2,43 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useLatestImport } from "@/lib/client/latest-import";
+import {
+  updateImportMappingApi,
+} from "@/lib/client/imports-api";
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
 import {
   areRequiredFieldsMapped,
   getMappingCompleteness,
 } from "@/lib/imports/mapping-utils";
 import {
-  getFieldMapping,
-  getLatestImport,
-  getLatestImportData,
-  saveFieldMapping,
-  saveImportAnalysisSnapshot,
-  updateImportStatus,
-} from "@/lib/imports/storage";
-import {
-  buildImportAnalysis,
-  snapshotHasReplayEvents,
-} from "@/lib/imports/import-analysis";
-import {
   GENETEC_FIELDS,
   isPreviewOnlyAnalysis,
   type FieldMapping,
-  type ImportRecord,
 } from "@/lib/imports/types";
+import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
+import { dispatchImportsRefreshed } from "@/lib/imports/imports-refreshed";
 
 export function FieldMappingContent() {
-  const [importRecord, setImportRecord] = useState<ImportRecord | null>(null);
+  const { loadedImport, loaded, reload } = useLatestImport();
+  const importRecord = loadedImport?.record ?? null;
   const [mapping, setMapping] = useState<FieldMapping | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useImportsRefreshed(reload);
 
   useEffect(() => {
-    const latest = getLatestImport();
-
-    if (!latest) {
-      setLoaded(true);
+    if (!importRecord) {
+      setMapping(null);
       return;
     }
 
-    setImportRecord(latest);
-
-    const rows = getLatestImportData();
-    const initial = resolveFieldMapping(latest.headers, rows, getFieldMapping(latest.id));
+    const initial =
+      importRecord.analysisSnapshot?.mapping ??
+      resolveFieldMapping(importRecord.headers, [], null);
 
     setMapping(initial);
-
-    const existingSnapshot = latest.analysisSnapshot;
-    if (existingSnapshot && !isPreviewOnlyAnalysis(latest)) {
-      setLoaded(true);
-      return;
-    }
-
-    const snapshot = buildImportAnalysis(
-      latest.headers,
-      rows,
-      latest.fileName,
-      initial,
-    );
-    saveImportAnalysisSnapshot(latest.id, snapshot);
-
-    if (areRequiredFieldsMapped(initial)) {
-      updateImportStatus(latest.id, "mapped");
-    }
-
-    setLoaded(true);
-  }, []);
+  }, [importRecord]);
 
   const completeness = useMemo(
     () => (mapping ? getMappingCompleteness(mapping) : 0),
@@ -77,39 +50,23 @@ export function FieldMappingContent() {
     [mapping],
   );
 
-  function handleMappingChange(fieldKey: keyof FieldMapping, value: string) {
+  async function handleMappingChange(fieldKey: keyof FieldMapping, value: string) {
     if (!importRecord || !mapping) return;
 
     const updated = { ...mapping, [fieldKey]: value };
     setMapping(updated);
+    setSaving(true);
 
-    const existingSnapshot = importRecord.analysisSnapshot;
-    if (
-      existingSnapshot &&
-      !isPreviewOnlyAnalysis(importRecord) &&
-      snapshotHasReplayEvents(existingSnapshot)
-    ) {
-      saveFieldMapping(importRecord.id, updated);
-      saveImportAnalysisSnapshot(importRecord.id, {
-        ...existingSnapshot,
-        mapping: updated,
-      });
-    } else {
-      const rows = getLatestImportData();
-      const snapshot = buildImportAnalysis(
-        importRecord.headers,
-        rows,
-        importRecord.fileName,
-        updated,
+    try {
+      await updateImportMappingApi(importRecord.id, updated);
+      dispatchImportsRefreshed();
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "Failed to save field mapping.",
       );
-
-      saveImportAnalysisSnapshot(importRecord.id, snapshot);
+    } finally {
+      setSaving(false);
     }
-
-    updateImportStatus(
-      importRecord.id,
-      areRequiredFieldsMapped(updated) ? "mapped" : "ready_for_mapping",
-    );
   }
 
   if (!loaded) {
@@ -171,12 +128,19 @@ export function FieldMappingContent() {
         </p>
       </div>
 
+      {isPreviewOnlyAnalysis(importRecord) && (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          Analysis snapshot is incomplete for this import.
+        </p>
+      )}
+
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold">Mapping completeness</h3>
             <p className="mt-1 text-sm text-slate-400">
               {completeness}% of fields mapped
+              {saving ? " · Saving..." : ""}
             </p>
           </div>
           <p className="text-3xl font-bold text-cyan-400">{completeness}%</p>
@@ -235,6 +199,7 @@ export function FieldMappingContent() {
                 onChange={(event) =>
                   handleMappingChange(field.key, event.target.value)
                 }
+                disabled={saving}
                 className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
               >
                 <option value="">— Select CSV column —</option>

@@ -12,9 +12,6 @@ import { runFireExitIntelligenceEngine } from "@/lib/analytics/fire-exit-intelli
 import type { TrendDirection } from "@/lib/analytics/door-intelligence-view";
 import type { RiskRating } from "@/lib/analytics/door-intelligence-view";
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
-import {
-  getFieldMapping,
-} from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
@@ -88,8 +85,7 @@ function buildExecutiveReportData(
     return { importRecord: null, report: null };
   }
 
-  const savedMapping =
-    latest.analysisSnapshot?.mapping ?? getFieldMapping(latest.id);
+  const savedMapping = latest.analysisSnapshot?.mapping ?? null;
 
   if (latest.analysisSnapshot?.intelligence) {
     return {
