@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getLatestProcessedServerImport } from "@/lib/server/db/latest-import";
-import { isInboundEmailConfigured } from "@/lib/server/env";
+import { isSupabaseConfigured } from "@/lib/server/env";
 import type { ImportAnalysisSnapshot } from "@/lib/imports/types";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  if (!isInboundEmailConfigured()) {
+  if (!isSupabaseConfigured()) {
     return NextResponse.json({ import: null, configured: false });
   }
 

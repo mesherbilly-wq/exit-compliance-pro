@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useLatestImport } from "@/lib/client/latest-import";
 import {
   buildDoorIntelligenceRows,
   getDoorHighlightType,
@@ -19,11 +19,10 @@ import {
   TIME_BEYOND_THRESHOLD_LABEL,
   TIME_BEYOND_THRESHOLD_TOOLTIP,
 } from "@/lib/analytics/labels";
-import { loadLatestDoorHealthData } from "@/lib/imports/door-health-loader";
+import { getImportDoorHealthAnalysis } from "@/lib/imports/door-health-loader";
 import type { DoorHealthAnalysis } from "@/lib/reports/analyze-door-health";
 import type { DoorHealthStatus } from "@/lib/reports/held-open-detection";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
-import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 import { DoorLink } from "@/components/doors/door-link";
@@ -78,26 +77,24 @@ const COLUMNS: {
 ];
 
 export function DoorIntelligenceContent() {
-  const pathname = usePathname();
-  const [importRecord, setImportRecord] = useState<ImportRecord | null>(null);
-  const [analysis, setAnalysis] = useState<DoorHealthAnalysis | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const { loadedImport, loaded, reload } = useLatestImport();
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<DoorIntelligenceSortKey>("riskRating");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  const reloadData = useCallback(() => {
-    const data = loadLatestDoorHealthData();
-    setImportRecord(data.importRecord);
-    setAnalysis(data.analysis);
-    setLoaded(true);
-  }, []);
+  useImportsRefreshed(reload);
 
-  useEffect(() => {
-    reloadData();
-  }, [pathname, reloadData]);
+  const importRecord = loadedImport?.record ?? null;
+  const analysis = useMemo<DoorHealthAnalysis | null>(() => {
+    if (!loadedImport?.record) {
+      return null;
+    }
 
-  useImportsRefreshed(reloadData);
+    return getImportDoorHealthAnalysis(
+      loadedImport.record,
+      loadedImport.rows,
+    ).analysis;
+  }, [loadedImport]);
 
   const rows = useMemo(() => {
     if (!analysis) {
