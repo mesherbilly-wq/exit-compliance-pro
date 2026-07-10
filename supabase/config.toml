@@ -1,0 +1,13 @@
+# Supabase local config for Exit Compliance Pro
+# See: https://supabase.com/docs/guides/cli/config
+
+project_id = "exit-compliance-pro"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
+
+[storage]
+enabled = true

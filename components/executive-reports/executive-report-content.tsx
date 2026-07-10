@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
+import { useLatestImport } from "@/lib/client/latest-import";
 import {
   buildExecutiveReport,
   type ExecutiveReport,
@@ -13,8 +14,6 @@ import type { RiskRating } from "@/lib/analytics/door-intelligence-view";
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
 import {
   getFieldMapping,
-  getLatestImport,
-  getLatestImportData,
 } from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
@@ -78,16 +77,17 @@ const PRIORITY_STYLES = {
   low: "border-cyan-500/25 bg-cyan-500/5",
 };
 
-function loadExecutiveReport(): {
+function buildExecutiveReportData(
+  latest: ImportRecord | null,
+  rows: Record<string, string>[],
+): {
   importRecord: ImportRecord | null;
   report: ExecutiveReport | null;
 } {
-  const latest = getLatestImport();
   if (!latest) {
     return { importRecord: null, report: null };
   }
 
-  const rows = getLatestImportData();
   const savedMapping =
     latest.analysisSnapshot?.mapping ?? getFieldMapping(latest.id);
 
@@ -119,22 +119,17 @@ function loadExecutiveReport(): {
 }
 
 export function ExecutiveReportContent() {
-  const [importRecord, setImportRecord] = useState<ImportRecord | null>(null);
-  const [report, setReport] = useState<ExecutiveReport | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const { loadedImport, loaded, reload } = useLatestImport();
+  const { importRecord, report } = useMemo(
+    () =>
+      buildExecutiveReportData(
+        loadedImport?.record ?? null,
+        loadedImport?.rows ?? [],
+      ),
+    [loadedImport],
+  );
 
-  const reloadReport = useCallback(() => {
-    const data = loadExecutiveReport();
-    setImportRecord(data.importRecord);
-    setReport(data.report);
-    setLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    reloadReport();
-  }, [reloadReport]);
-
-  useImportsRefreshed(reloadReport);
+  useImportsRefreshed(reload);
 
   if (!loaded) {
     return <p className="text-sm text-slate-400">Preparing management review...</p>;

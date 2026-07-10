@@ -3,11 +3,8 @@
 import Link from "next/link";
 import Papa from "papaparse";
 import { useState } from "react";
+import { normalizeParsedCsv } from "@/lib/imports/parse-csv-text";
 import { saveImport, saveImportData, StorageError } from "@/lib/imports/storage";
-import {
-  fixHeaderlessCsvParse,
-  looksLikeHeaderlessExport,
-} from "@/lib/imports/resolve-mapping";
 import type { ImportRecord } from "@/lib/imports/types";
 import { IMPORT_STATUS_LABELS, PREVIEW_ROW_LIMIT } from "@/lib/imports/types";
 
@@ -32,14 +29,17 @@ export function CsvUploadForm() {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
+        if (results.errors.length > 0) {
+          setStorageError(results.errors[0]?.message ?? "CSV parsing failed.");
+          return;
+        }
+
         let parsedHeaders = results.meta.fields ?? [];
         let parsedRows = results.data;
 
-        if (looksLikeHeaderlessExport(parsedHeaders)) {
-          const fixed = fixHeaderlessCsvParse(parsedHeaders, parsedRows);
-          parsedHeaders = fixed.headers;
-          parsedRows = fixed.rows;
-        }
+        const normalized = normalizeParsedCsv(parsedHeaders, parsedRows);
+        parsedHeaders = normalized.headers;
+        parsedRows = normalized.rows;
 
         setRows(parsedRows);
         setHeaders(parsedHeaders);

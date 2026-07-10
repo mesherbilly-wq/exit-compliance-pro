@@ -9,6 +9,7 @@ import {
 import { formatDurationReadable } from "@/lib/reports/held-open-detection";
 import { refreshAllImportAnalysisSnapshots } from "@/lib/imports/storage";
 import { dispatchImportsRefreshed } from "@/lib/imports/imports-refreshed";
+import { InboundEmailSettingsPanel } from "@/components/settings/inbound-email-settings-panel";
 
 function buildRefreshMessage(result: {
   refreshed: number;
@@ -177,6 +178,8 @@ export function SettingsContent() {
           <p className="mt-3 text-sm text-cyan-300">{refreshMessage}</p>
         )}
       </form>
+
+      <InboundEmailSettingsPanel />
     </div>
   );
 }

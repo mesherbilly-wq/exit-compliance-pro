@@ -1,4 +1,3 @@
-import { getLatestImport } from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 import { getDoorRecommendations } from "./compliance-recommendations";
 import type { ComplianceRecommendation } from "./compliance-recommendations";
@@ -23,8 +22,10 @@ export type DoorProfileData = {
   report: FireExitIntelligenceReport | null;
 };
 
-export function loadDoorProfile(doorName: string): DoorProfileData {
-  const importRecord = getLatestImport();
+export function loadDoorProfile(
+  doorName: string,
+  importRecord: ImportRecord | null,
+): DoorProfileData {
   const empty: DoorProfileData = {
     importRecord,
     profile: null,

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { useLatestImport } from "@/lib/client/latest-import";
 import {
   buildComplianceIntelligenceDashboard,
   type ComplianceIntelligenceDashboard,
@@ -10,8 +11,6 @@ import { runFireExitIntelligenceEngine } from "@/lib/analytics/fire-exit-intelli
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
 import {
   getFieldMapping,
-  getLatestImport,
-  getLatestImportData,
 } from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
@@ -38,16 +37,17 @@ const PRIORITY_STYLES = {
   low: "border-cyan-500/30 bg-cyan-500/10 text-cyan-200",
 };
 
-function loadComplianceDashboard(): {
+function buildComplianceDashboard(
+  latest: ImportRecord | null,
+  rows: Record<string, string>[],
+): {
   importRecord: ImportRecord | null;
   dashboard: ComplianceIntelligenceDashboard | null;
 } {
-  const latest = getLatestImport();
   if (!latest) {
     return { importRecord: null, dashboard: null };
   }
 
-  const rows = getLatestImportData();
   const savedMapping =
     latest.analysisSnapshot?.mapping ?? getFieldMapping(latest.id);
 
@@ -81,24 +81,15 @@ function loadComplianceDashboard(): {
 }
 
 export function ComplianceIntelligenceContent() {
-  const [importRecord, setImportRecord] = useState<ImportRecord | null>(null);
-  const [dashboard, setDashboard] = useState<ComplianceIntelligenceDashboard | null>(
-    null,
+  const { loadedImport, loaded, reload } = useLatestImport();
+  const importRecord = loadedImport?.record ?? null;
+  const dashboard = useMemo(
+    () =>
+      buildComplianceDashboard(importRecord, loadedImport?.rows ?? []).dashboard,
+    [importRecord, loadedImport?.rows],
   );
-  const [loaded, setLoaded] = useState(false);
 
-  const reloadDashboard = useCallback(() => {
-    const data = loadComplianceDashboard();
-    setImportRecord(data.importRecord);
-    setDashboard(data.dashboard);
-    setLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    reloadDashboard();
-  }, [reloadDashboard]);
-
-  useImportsRefreshed(reloadDashboard);
+  useImportsRefreshed(reload);
 
   const primaryCards = useMemo(() => {
     if (!dashboard) {

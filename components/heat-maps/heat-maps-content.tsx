@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useLatestImport } from "@/lib/client/latest-import";
 import {
   buildHeatMapDashboard,
   DEFAULT_HEAT_MAP_FILTERS,
@@ -12,8 +13,6 @@ import { runFireExitIntelligenceEngine } from "@/lib/analytics/fire-exit-intelli
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
 import {
   getFieldMapping,
-  getLatestImport,
-  getLatestImportData,
 } from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
@@ -33,17 +32,18 @@ const RISK_LEVELS: Array<RiskRating | "All"> = [
   "Critical",
 ];
 
-function loadHeatMapSource(): {
+function buildHeatMapSource(
+  latest: ImportRecord | null,
+  rows: Record<string, string>[],
+): {
   importRecord: ImportRecord | null;
   report: FireExitIntelligenceReport | null;
   rows: Record<string, string>[];
 } {
-  const latest = getLatestImport();
   if (!latest) {
     return { importRecord: null, report: null, rows: [] };
   }
 
-  const rows = getLatestImportData();
   const savedMapping =
     latest.analysisSnapshot?.mapping ?? getFieldMapping(latest.id);
 
@@ -73,27 +73,19 @@ function loadHeatMapSource(): {
 }
 
 export function HeatMapsContent() {
-  const [importRecord, setImportRecord] = useState<ImportRecord | null>(null);
-  const [report, setReport] = useState<FireExitIntelligenceReport | null>(null);
-  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const { loadedImport, loaded, reload } = useLatestImport();
+  const source = useMemo(
+    () => buildHeatMapSource(loadedImport?.record ?? null, loadedImport?.rows ?? []),
+    [loadedImport],
+  );
+  const importRecord = source.importRecord;
+  const report = source.report;
+  const rows = source.rows;
   const [filters, setFilters] = useState<HeatMapFilterState>(
     DEFAULT_HEAT_MAP_FILTERS,
   );
-  const [loaded, setLoaded] = useState(false);
 
-  const reloadHeatMapSource = useCallback(() => {
-    const source = loadHeatMapSource();
-    setImportRecord(source.importRecord);
-    setReport(source.report);
-    setRows(source.rows);
-    setLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    reloadHeatMapSource();
-  }, [reloadHeatMapSource]);
-
-  useImportsRefreshed(reloadHeatMapSource);
+  useImportsRefreshed(reload);
 
   const dashboard = useMemo<HeatMapDashboard | null>(() => {
     if (!report) {

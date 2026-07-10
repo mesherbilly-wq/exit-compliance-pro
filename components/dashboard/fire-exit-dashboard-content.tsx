@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { toFireExitDashboardAnalysis } from "@/lib/analytics/report-adapters";
 import {
   analyzeFireExitDashboard,
@@ -9,14 +9,13 @@ import {
 } from "@/lib/reports/analyze-fire-exit-dashboard";
 import type { FireExitDashboardAnalysis } from "@/lib/reports/analyze-fire-exit-dashboard";
 import type { DoorComplianceStatus } from "@/lib/reports/held-open-detection";
+import { useLatestImport } from "@/lib/client/latest-import";
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
 import {
   getFieldMapping,
-  getLatestImport,
-  getLatestImportData,
 } from "@/lib/imports/storage";
-import type { FieldMapping, ImportRecord } from "@/lib/imports/types";
+import type { FieldMapping } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import {
   TIME_BEYOND_THRESHOLD_LABEL,
@@ -32,29 +31,28 @@ const STATUS_STYLES: Record<DoorComplianceStatus, string> = {
 };
 
 export function FireExitDashboardContent() {
-  const [importRecord, setImportRecord] = useState<ImportRecord | null>(null);
-  const [mapping, setMapping] = useState<FieldMapping | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const { loadedImport, loaded, reload } = useLatestImport();
+  const importRecord = loadedImport?.record ?? null;
 
-  const reloadImportState = useCallback(() => {
-    const latest = getLatestImport();
-    const rows = getLatestImportData();
-    setImportRecord(latest);
-    setMapping(
-      latest
-        ? resolveFieldMapping(latest.headers, rows, getFieldMapping(latest.id))
-        : null,
+  const mapping = useMemo(() => {
+    if (!importRecord) {
+      return null;
+    }
+
+    const rows = loadedImport?.rows ?? [];
+    return (
+      importRecord.analysisSnapshot?.mapping ??
+      resolveFieldMapping(
+        importRecord.headers,
+        rows,
+        getFieldMapping(importRecord.id),
+      )
     );
-    setLoaded(true);
-  }, []);
+  }, [importRecord, loadedImport?.rows]);
 
-  useEffect(() => {
-    reloadImportState();
-  }, [reloadImportState]);
+  useImportsRefreshed(reload);
 
-  useImportsRefreshed(reloadImportState);
-
-  const rows = useMemo(() => getLatestImportData(), [loaded, importRecord]);
+  const rows = useMemo(() => loadedImport?.rows ?? [], [loadedImport?.rows]);
 
   const analysis = useMemo<FireExitDashboardAnalysis | null>(() => {
     if (!importRecord || !mapping) {

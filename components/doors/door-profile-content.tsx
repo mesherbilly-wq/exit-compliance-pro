@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useLatestImport } from "@/lib/client/latest-import";
 import type { ComplianceRecommendation } from "@/lib/analytics/compliance-recommendations";
 import { loadDoorProfile } from "@/lib/analytics/door-profile-loader";
 import type { RiskRating } from "@/lib/analytics/door-intelligence-view";
@@ -63,19 +64,13 @@ type DoorProfileContentProps = {
 
 export function DoorProfileContent({ doorParam }: DoorProfileContentProps) {
   const doorName = decodeDoorParam(doorParam);
-  const [loaded, setLoaded] = useState(false);
-  const [data, setData] = useState(() => loadDoorProfile(doorName));
+  const { loadedImport, loaded, reload } = useLatestImport();
+  const data = useMemo(
+    () => loadDoorProfile(doorName, loadedImport?.record ?? null),
+    [doorName, loadedImport?.record],
+  );
 
-  const reloadProfile = useCallback(() => {
-    setData(loadDoorProfile(doorName));
-    setLoaded(true);
-  }, [doorName]);
-
-  useEffect(() => {
-    reloadProfile();
-  }, [reloadProfile]);
-
-  useImportsRefreshed(reloadProfile);
+  useImportsRefreshed(reload);
 
   const timelineIncidents = useMemo(() => {
     if (!data.profile) {

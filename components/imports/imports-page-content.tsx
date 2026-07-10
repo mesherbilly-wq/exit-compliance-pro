@@ -6,6 +6,7 @@ import {
   ImportStatusCards,
   RecentImportsTable,
 } from "@/components/imports/imports-overview";
+import { InboundImportsTable } from "@/components/imports/inbound-imports-table";
 import { deleteImport, getRecentImports } from "@/lib/imports/storage";
 import type { ImportRecord } from "@/lib/imports/types";
 
@@ -59,6 +60,8 @@ export function ImportsPageContent() {
 
         <RecentImportsTable imports={imports} onDelete={handleDeleteImport} />
       </section>
+
+      <InboundImportsTable />
     </div>
   );
 }

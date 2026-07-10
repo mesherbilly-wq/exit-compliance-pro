@@ -5,6 +5,7 @@ import {
   refreshIntelligenceReportWithConfig,
 } from "@/lib/analytics/fire-exit-intelligence-engine";
 import { getAnalyticsConfig } from "@/lib/analytics/config";
+import type { FireExitAnalyticsConfig } from "@/lib/analytics/types";
 import { toDoorHealthAnalysis } from "@/lib/analytics/report-adapters";
 import type { DoorHealthAnalysis } from "@/lib/reports/analyze-door-health";
 import type { CsvRow } from "./types";
@@ -19,10 +20,12 @@ export function buildImportAnalysis(
   rows: CsvRow[],
   fileName: string,
   savedMapping?: FieldMapping | null,
+  config?: FireExitAnalyticsConfig,
 ): ImportAnalysisSnapshot {
   const artifacts = runFireExitIntelligenceWithArtifacts(rows, headers, {
     sourceFileName: fileName,
     savedMapping,
+    config: config ?? getAnalyticsConfig(),
   });
 
   return toImportAnalysisSnapshot(
