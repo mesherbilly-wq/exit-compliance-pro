@@ -23,6 +23,7 @@ import {
   TIME_BEYOND_THRESHOLD_TOOLTIP,
 } from "@/lib/analytics/labels";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
+import { DoorLink } from "@/components/doors/door-link";
 
 const RISK_STYLES: Record<RiskRating, string> = {
   Low: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -173,15 +174,20 @@ export function ComplianceIntelligenceContent() {
       {
         label: "Longest single incident",
         value: dashboard.longestSingleIncidentLabel,
-        detail: dashboard.longestSingleIncidentDoor,
+        detailDoor:
+          dashboard.longestSingleIncidentDoor !== "N/A"
+            ? dashboard.longestSingleIncidentDoor
+            : undefined,
       },
       {
         label: "Most improved door",
         value: dashboard.mostImprovedDoor,
+        valueIsDoor: true,
       },
       {
         label: "Highest risk door",
         value: dashboard.highestRiskDoor,
+        valueIsDoor: true,
       },
       {
         label: "Most common time of day",
@@ -297,9 +303,19 @@ export function ComplianceIntelligenceContent() {
             className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
           >
             <p className="text-sm text-slate-400">{card.label}</p>
-            <p className="mt-2 text-lg font-semibold text-white">{card.value}</p>
-            {card.detail && card.detail !== "N/A" && (
-              <p className="mt-1 text-sm text-slate-400">{card.detail}</p>
+            <p className="mt-2 text-lg font-semibold text-white">
+              {"valueIsDoor" in card &&
+              card.valueIsDoor &&
+              card.value !== "N/A" ? (
+                <DoorLink door={card.value} />
+              ) : (
+                card.value
+              )}
+            </p>
+            {"detailDoor" in card && card.detailDoor && (
+              <p className="mt-1 text-sm text-slate-400">
+                Door: <DoorLink door={card.detailDoor} className="inline text-sm" />
+              </p>
             )}
           </div>
         ))}
@@ -318,6 +334,11 @@ export function ComplianceIntelligenceContent() {
               className={`rounded-xl border px-4 py-3 text-sm ${PRIORITY_STYLES[recommendation.priority]}`}
             >
               <p className="font-medium capitalize">{recommendation.priority} priority</p>
+              {recommendation.door && (
+                <p className="mt-1">
+                  <DoorLink door={recommendation.door} className="text-sm" />
+                </p>
+              )}
               <p className="mt-1">{recommendation.message}</p>
             </div>
           ))}

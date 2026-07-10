@@ -23,6 +23,7 @@ import {
   TIME_BEYOND_THRESHOLD_TOOLTIP,
 } from "@/lib/analytics/labels";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
+import { DoorLink } from "@/components/doors/door-link";
 
 const STATUS_STYLES: Record<DoorComplianceStatus, string> = {
   Compliant: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -151,6 +152,10 @@ export function FireExitDashboardContent() {
       value: analysis.worstPerformingDoor,
       accent: "text-red-400",
       small: true,
+      door:
+        analysis.worstPerformingDoor !== "N/A"
+          ? analysis.worstPerformingDoor
+          : undefined,
     },
   ];
 
@@ -180,7 +185,7 @@ export function FireExitDashboardContent() {
           disabled
           className="cursor-not-allowed rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-500"
         >
-          Export Executive Report
+          Export Management Review
         </button>
       </div>
 
@@ -193,13 +198,19 @@ export function FireExitDashboardContent() {
             <p className="text-sm text-slate-400" title={"title" in card ? card.title : undefined}>
               {card.label}
             </p>
-            <p
-              className={`mt-2 font-bold ${card.accent} ${
-                card.small ? "text-lg" : "text-3xl"
-              }`}
-            >
-              {card.value}
-            </p>
+            {"door" in card && card.door ? (
+              <div className={`mt-2 font-bold ${card.accent} text-lg`}>
+                <DoorLink door={card.door} />
+              </div>
+            ) : (
+              <p
+                className={`mt-2 font-bold ${card.accent} ${
+                  "small" in card && card.small ? "text-lg" : "text-3xl"
+                }`}
+              >
+                {card.value}
+              </p>
+            )}
           </div>
         ))}
       </section>
@@ -235,7 +246,7 @@ export function FireExitDashboardContent() {
                 {analysis.problemDoors.map((door) => (
                   <tr key={door.door} className="border-b border-slate-800">
                     <td className="px-4 py-3 font-medium text-white">
-                      {door.door}
+                      <DoorLink door={door.door} />
                     </td>
                     <td className="px-4 py-3 text-slate-300">
                       {door.heldOpenEvents}
@@ -295,7 +306,9 @@ export function FireExitDashboardContent() {
                     <td className="whitespace-nowrap px-4 py-3 text-slate-300">
                       {event.time}
                     </td>
-                    <td className="px-4 py-3 text-white">{event.door}</td>
+                    <td className="px-4 py-3 text-white">
+                      <DoorLink door={event.door} />
+                    </td>
                     <td className="px-4 py-3 text-slate-300">
                       {event.eventType}
                     </td>

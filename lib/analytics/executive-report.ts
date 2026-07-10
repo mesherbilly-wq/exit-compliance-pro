@@ -237,7 +237,7 @@ function getSiteHealthRating(report: FireExitIntelligenceReport): {
 
   return {
     rating: "Critical",
-    summary: "Significant life safety exposure — immediate executive intervention required.",
+    summary: "Significant life safety exposure — immediate management intervention required.",
   };
 }
 
@@ -385,7 +385,7 @@ export function buildExecutiveReport(
     criticalIncidentsLabel:
       criticalIncidents === 0
         ? "No critical incidents"
-        : `${criticalIncidents} session${criticalIncidents === 1 ? "" : "s"} requiring executive attention`,
+        : `${criticalIncidents} session${criticalIncidents === 1 ? "" : "s"} requiring management attention`,
     siteHealthRating: rating,
     siteHealthSummary,
     totalDoors: normalized.summary.totalDoors,

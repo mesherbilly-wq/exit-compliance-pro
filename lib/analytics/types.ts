@@ -3,6 +3,20 @@ import type { DoorHealthStatus } from "@/lib/reports/held-open-detection";
 
 export type RiskRating = "Low" | "Medium" | "High" | "Critical";
 
+export type ComplianceRating = DoorHealthStatus;
+
+export type RiskTrend = "Improving" | "Stable" | "Worsening" | "N/A";
+
+export type IncidentFrequency = "Daily" | "Weekly" | "Monthly" | "Rare";
+
+export type OperationalPattern =
+  | "Morning Deliveries"
+  | "Lunch Time"
+  | "Evenings"
+  | "Weekends"
+  | "Random"
+  | "Recurring";
+
 export type FireExitAnalyticsConfig = {
   heldOpenThresholdSeconds: number;
 };
@@ -55,6 +69,38 @@ export type TrendPoint = {
   exposureSeconds: number;
 };
 
+export type DoorComplianceProfile = {
+  door: string;
+  complianceScore: number;
+  complianceRating: ComplianceRating;
+  incidents: ComplianceIncident[];
+  incidentCount: number;
+  timeBeyondThresholdSeconds: number;
+  timeBeyondThresholdLabel: string;
+  longestIncidentSeconds: number | null;
+  longestIncidentLabel: string;
+  averageIncidentDurationSeconds: number | null;
+  averageIncidentDurationLabel: string;
+  averageTimeBeyondThresholdSeconds: number | null;
+  averageTimeBeyondThresholdLabel: string;
+  lastIncidentLabel: string;
+  lastIncidentTimestamp: number | null;
+  daysAffected: number;
+  mostCommonDay: string;
+  mostCommonTime: string;
+  peakRiskWindow: string;
+  riskTrend: RiskTrend;
+  riskTrendScore: number;
+  incidentFrequency: IncidentFrequency;
+  operationalPattern: OperationalPattern;
+  totalFireExitEvents: number;
+  repeatOccurrences: number;
+  timeOfDayDistribution: DistributionBucket[];
+  dayOfWeekDistribution: DistributionBucket[];
+  weeklyTrend: TrendPoint[];
+  monthlyTrend: TrendPoint[];
+};
+
 export type DoorIntelligenceProfile = {
   door: string;
   totalFireExitEvents: number;
@@ -77,6 +123,8 @@ export type DoorIntelligenceProfile = {
   monthlyTrend: TrendPoint[];
   complianceScore: number;
   status: DoorHealthStatus;
+  /** Canonical rich compliance intelligence for this fire exit */
+  complianceProfile?: DoorComplianceProfile;
   incidents: ComplianceIncident[];
   /** @deprecated Use incidents */
   sessions: ComplianceIncident[];
@@ -104,6 +152,8 @@ export type FireExitIntelligenceReport = {
   analyzedRowCount: number;
   analyzedAt: string;
   doors: DoorIntelligenceProfile[];
+  /** Rich per-door compliance profiles derived from the same analysis pass */
+  doorComplianceProfiles?: DoorComplianceProfile[];
   summary: FireExitPortfolioSummary;
 };
 

@@ -2,6 +2,7 @@ import type { CsvRow, FieldMapping } from "@/lib/imports/types";
 import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
 import { formatDurationLabel } from "@/lib/reports/held-open-detection";
 import { getAnalyticsConfig } from "./config";
+import { attachComplianceProfilesToReport } from "./door-compliance-profile";
 import { buildDoorIntelligenceProfile } from "./scoring";
 import { buildComplianceIncidents } from "./compliance-incidents";
 import { groupEventsByDoor, parseFireExitEvents } from "./parse-events";
@@ -79,7 +80,7 @@ function buildReportFromEvents(
     hasDurationField,
   );
 
-  return {
+  return attachComplianceProfilesToReport({
     config,
     mapping,
     sourceFileName,
@@ -87,7 +88,7 @@ function buildReportFromEvents(
     analyzedAt: new Date().toISOString(),
     doors,
     summary,
-  };
+  });
 }
 
 function buildPortfolioSummary(

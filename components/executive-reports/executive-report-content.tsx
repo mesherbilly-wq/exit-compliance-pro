@@ -25,6 +25,7 @@ import {
 } from "@/lib/analytics/labels";
 import { formatDurationLabel } from "@/lib/reports/held-open-detection";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
+import { DoorLink } from "@/components/doors/door-link";
 
 const SITE_HEALTH_STYLES: Record<
   SiteHealthRating,
@@ -136,7 +137,7 @@ export function ExecutiveReportContent() {
   useImportsRefreshed(reloadReport);
 
   if (!loaded) {
-    return <p className="text-sm text-slate-400">Preparing executive report...</p>;
+    return <p className="text-sm text-slate-400">Preparing management review...</p>;
   }
 
   if (!importRecord) {
@@ -159,7 +160,7 @@ export function ExecutiveReportContent() {
     return (
       <ExecutiveEmptyState
         title="Field mapping required"
-        message="Complete field mapping for your latest import to generate the executive report."
+        message="Complete field mapping for your latest import to generate the management review."
       >
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
@@ -191,7 +192,7 @@ export function ExecutiveReportContent() {
                 Fire Exit Intelligence Platform
               </p>
               <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Executive Compliance Report
+                Management Review
               </h1>
               <p className="mt-2 text-sm text-slate-400">
                 One-page management summary for directors and facilities managers
@@ -302,6 +303,11 @@ export function ExecutiveReportContent() {
               detail={report.highestRiskDoorDetail}
               valueClass="text-base font-semibold text-white"
               compact
+              door={
+                report.highestRiskDoor !== "N/A"
+                  ? report.highestRiskDoor
+                  : undefined
+              }
             />
             <MetricTile
               label={TIME_BEYOND_THRESHOLD_LABEL}
@@ -380,7 +386,9 @@ export function ExecutiveReportContent() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-white">{item.door}</p>
+                          <p className="font-semibold text-white">
+                            <DoorLink door={item.door} />
+                          </p>
                           <span
                             className={`text-xs font-semibold ${RISK_STYLES[item.riskRating]}`}
                           >
@@ -425,7 +433,9 @@ export function ExecutiveReportContent() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-white">{item.door}</p>
+                          <p className="font-semibold text-white">
+                            <DoorLink door={item.door} />
+                          </p>
                           <span
                             className={`text-xs font-semibold ${TREND_STYLES[item.trend]}`}
                           >
@@ -462,6 +472,11 @@ export function ExecutiveReportContent() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     {recommendation.priority} priority
                   </p>
+                  {recommendation.door && (
+                    <p className="mt-1 text-sm">
+                      <DoorLink door={recommendation.door} className="text-sm" />
+                    </p>
+                  )}
                   <p className="mt-1 text-sm text-slate-200">
                     {recommendation.message}
                   </p>
@@ -492,24 +507,32 @@ function MetricTile({
   detail,
   valueClass,
   compact = false,
+  door,
 }: {
   label: string;
   value: string;
   detail: string;
   valueClass: string;
   compact?: boolean;
+  door?: string;
 }) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
         {label}
       </p>
-      <p
-        className={`mt-2 truncate ${compact ? "text-base" : ""} ${valueClass}`}
-        title={value}
-      >
-        {value}
-      </p>
+      {door ? (
+        <div className={`mt-2 truncate ${compact ? "text-base" : ""}`}>
+          <DoorLink door={door} />
+        </div>
+      ) : (
+        <p
+          className={`mt-2 truncate ${compact ? "text-base" : ""} ${valueClass}`}
+          title={value}
+        >
+          {value}
+        </p>
+      )}
       <p className="mt-2 text-xs leading-relaxed text-slate-400">{detail}</p>
     </div>
   );
@@ -540,10 +563,10 @@ function ExecutiveEmptyState({
   return (
     <div className="mx-auto max-w-5xl">
       <p className="text-sm font-semibold uppercase tracking-wide text-cyan-400">
-        Executive Reports
+        Fire Exit Intelligence
       </p>
       <h2 className="mt-3 text-3xl font-bold tracking-tight">
-        Executive Compliance Report
+        Management Review
       </h2>
       <p className="mt-4 max-w-3xl text-slate-300">
         One-page management summary for directors and facilities managers.

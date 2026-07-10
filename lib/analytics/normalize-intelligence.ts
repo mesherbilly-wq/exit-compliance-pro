@@ -2,6 +2,10 @@ import {
   getIncidentDurationBucket,
   getIncidentRiskRating,
 } from "./compliance-incidents";
+import {
+  attachComplianceProfilesToReport,
+  buildDoorComplianceProfile,
+} from "./door-compliance-profile";
 import type {
   ComplianceIncident,
   DoorIntelligenceProfile,
@@ -80,12 +84,27 @@ export function normalizeDoorProfile(
   const totalIncidents =
     door.totalIncidents ?? door.totalHeldOpenEvents ?? incidents.length;
 
-  return {
+  const normalized = {
     ...door,
     incidents,
     sessions: incidents,
     totalIncidents,
     totalHeldOpenEvents: totalIncidents,
+  };
+
+  if (normalized.complianceProfile) {
+    return normalized;
+  }
+
+  const complianceProfile = buildDoorComplianceProfile(
+    door.door,
+    door.totalFireExitEvents,
+    incidents,
+  );
+
+  return {
+    ...normalized,
+    complianceProfile,
   };
 }
 
@@ -102,7 +121,7 @@ export function normalizeIntelligenceReport(
     0,
   );
 
-  return {
+  return attachComplianceProfilesToReport({
     ...report,
     doors,
     summary: {
@@ -110,5 +129,5 @@ export function normalizeIntelligenceReport(
       totalHeldOpenEvents:
         report.summary.totalHeldOpenEvents ?? totalHeldOpenEvents,
     },
-  };
+  });
 }

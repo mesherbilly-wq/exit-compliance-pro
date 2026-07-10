@@ -26,6 +26,7 @@ import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
+import { DoorLink } from "@/components/doors/door-link";
 
 const STATUS_STYLES: Record<DoorHealthStatus, string> = {
   Excellent: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -297,7 +298,9 @@ export function DoorIntelligenceContent() {
                         highlight ? HIGHLIGHT_ROW_STYLES[highlight] : ""
                       }`}
                     >
-                      <td className="px-4 py-3 font-medium text-white">{row.door}</td>
+                      <td className="px-4 py-3 font-medium text-white">
+                        <DoorLink door={row.door} />
+                      </td>
                       <td className="px-4 py-3 text-slate-300">{row.complianceScore}%</td>
                       <td className="px-4 py-3">
                         <span
@@ -396,7 +399,7 @@ function HighlightPanel({
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-white">
-                  {index + 1}. {door.door}
+                  {index + 1}. <DoorLink door={door.door} className="inline" />
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
                   {door.riskRating} risk · {door.totalExposureLabel} beyond threshold · {door.trend}

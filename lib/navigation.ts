@@ -11,7 +11,7 @@ export const navItems: NavItem[] = [
   { label: "Compliance Intelligence", href: "/compliance", match: "prefix" },
   { label: "Heat Maps", href: "/heat-maps", match: "prefix" },
   { label: "Trends", href: "/trends", match: "prefix" },
-  { label: "Executive Reports", href: "/executive-reports", match: "prefix" },
+  { label: "Management Review", href: "/executive-reports", match: "prefix" },
   { label: "Settings", href: "/settings", match: "prefix" },
 ];
 
@@ -21,10 +21,11 @@ const pageTitles: Record<string, string> = {
   "/imports/upload": "Upload CSV",
   "/imports/mapping": "Field Mapping",
   "/doors": "Door Intelligence",
+  "/doors/profile": "Door Profile",
   "/compliance": "Compliance Intelligence",
   "/heat-maps": "Heat Maps",
   "/trends": "Trends",
-  "/executive-reports": "Executive Reports",
+  "/executive-reports": "Management Review",
   "/settings": "Settings",
 };
 
@@ -47,6 +48,18 @@ export function isNavActive(pathname: string, item: NavItem): boolean {
 export function getPageTitle(pathname: string): string {
   if (pageTitles[pathname]) {
     return pageTitles[pathname];
+  }
+
+  const normalizedPath =
+    pathname !== "/" ? pathname.replace(/\/$/, "") : pathname;
+
+  if (normalizedPath.startsWith("/doors/") && normalizedPath !== "/doors") {
+    try {
+      const doorSegment = normalizedPath.slice("/doors/".length);
+      return decodeURIComponent(doorSegment);
+    } catch {
+      return "Door Profile";
+    }
   }
 
   const match = Object.entries(pageTitles)
