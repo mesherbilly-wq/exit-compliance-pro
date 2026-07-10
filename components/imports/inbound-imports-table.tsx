@@ -27,6 +27,39 @@ export function InboundImportsTable() {
   const [imports, setImports] = useState<ServerImportListItem[]>([]);
   const [loaded, setLoaded] = useState(false);
 
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(item: ServerImportListItem) {
+    const confirmed = window.confirm(
+      `Delete "${item.fileName}"? This will remove the inbound import and its stored CSV from the server.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(item.id);
+
+    try {
+      const response = await fetch(`/api/imports/inbound/${item.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error ?? "Failed to delete import.");
+      }
+
+      setImports((current) => current.filter((row) => row.id !== item.id));
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "Failed to delete import.",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const reload = useCallback(async () => {
     const [importsResponse, statusResponse] = await Promise.all([
       fetch("/api/imports/inbound"),
@@ -107,6 +140,7 @@ export function InboundImportsTable() {
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Rows processed</th>
                 <th className="px-4 py-3 font-medium">Processing result</th>
+                <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -138,6 +172,16 @@ export function InboundImportsTable() {
                   </td>
                   <td className="px-4 py-3 text-slate-400">
                     {item.processingResult ?? "N/A"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(item)}
+                      disabled={deletingId === item.id}
+                      className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deletingId === item.id ? "Deleting..." : "Delete"}
+                    </button>
                   </td>
                 </tr>
               ))}

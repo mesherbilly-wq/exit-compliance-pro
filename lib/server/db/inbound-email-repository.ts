@@ -144,6 +144,7 @@ export async function listServerImports(): Promise<ServerImportListItem[]> {
       )
     `,
     )
+    .eq("source", "inbound_email")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -152,6 +153,64 @@ export async function listServerImports(): Promise<ServerImportListItem[]> {
   }
 
   return ((data as ServerImportRecord[]) ?? []).map(mapImportListItem);
+}
+
+export async function getServerImportById(
+  importId: string,
+): Promise<ServerImportRecord | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("imports")
+    .select("*")
+    .eq("id", importId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load import: ${error.message}`);
+  }
+
+  return (data as ServerImportRecord | null) ?? null;
+}
+
+export async function deleteServerImport(
+  importId: string,
+  bucket: string,
+): Promise<void> {
+  const importRecord = await getServerImportById(importId);
+
+  if (!importRecord) {
+    throw new Error("Import not found.");
+  }
+
+  if (importRecord.source !== "inbound_email") {
+    throw new Error("Only inbound email imports can be deleted from this endpoint.");
+  }
+
+  const supabase = getSupabaseAdmin();
+
+  if (importRecord.original_file_path) {
+    const { error: storageError } = await supabase.storage
+      .from(bucket)
+      .remove([importRecord.original_file_path]);
+
+    if (storageError) {
+      console.warn(
+        JSON.stringify({
+          scope: "imports-api",
+          event: "storage-delete-warning",
+          importId,
+          path: importRecord.original_file_path,
+          message: storageError.message,
+        }),
+      );
+    }
+  }
+
+  const { error } = await supabase.from("imports").delete().eq("id", importId);
+
+  if (error) {
+    throw new Error(`Failed to delete import: ${error.message}`);
+  }
 }
 
 export async function getInboundEmailSummary(): Promise<{

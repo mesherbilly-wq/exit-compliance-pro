@@ -35,8 +35,20 @@ export function getServerEnv(): ServerEnv {
   };
 }
 
+export function getSupabaseStorageBucket(): string {
+  return readRequired("SUPABASE_STORAGE_BUCKET");
+}
+
 export function getPublicInboundEmail(): string | null {
   return process.env.INBOUND_REPORT_EMAIL?.trim() ?? null;
+}
+
+export function isSupabaseConfigured(): boolean {
+  return Boolean(
+    process.env.SUPABASE_URL &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      process.env.SUPABASE_STORAGE_BUCKET,
+  );
 }
 
 export function isInboundEmailConfigured(): boolean {
