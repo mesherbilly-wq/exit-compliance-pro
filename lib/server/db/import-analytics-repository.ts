@@ -201,17 +201,33 @@ export async function loadParsedEventsForImports(
   }
 
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("import_parsed_events")
-    .select("door, event_time, event_type, event_timestamp, csv_duration_seconds")
-    .in("import_id", importIds)
-    .order("event_timestamp", { ascending: true });
+  const pageSize = 1000;
+  const allRows: ImportParsedEventRow[] = [];
+  let from = 0;
 
-  if (error) {
-    throw new Error(`Failed to load parsed events: ${error.message}`);
+  while (true) {
+    const { data, error } = await supabase
+      .from("import_parsed_events")
+      .select("door, event_time, event_type, event_timestamp, csv_duration_seconds")
+      .in("import_id", importIds)
+      .order("event_timestamp", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to load parsed events: ${error.message}`);
+    }
+
+    const batch = (data as ImportParsedEventRow[]) ?? [];
+    allRows.push(...batch);
+
+    if (batch.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
   }
 
-  return ((data as ImportParsedEventRow[]) ?? []).map((row) => ({
+  return allRows.map((row) => ({
     door: row.door,
     eventTime: row.event_time,
     eventType: row.event_type,
