@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLatestImportForAnalytics } from "@/lib/server/db/latest-import";
-import { buildImportAnalysisSnapshotFromImport } from "@/lib/server/imports/build-intelligence-from-db";
+import { buildAccumulatedImportAnalysisSnapshot } from "@/lib/server/imports/build-intelligence-from-db";
 import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import { isSupabaseConfigured } from "@/lib/server/env";
 
@@ -18,50 +17,73 @@ function parseThreshold(request: Request): number {
   return DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds;
 }
 
+function formatReportingPeriod(
+  start: string | null,
+  end: string | null,
+): { start: string | null; end: string | null } {
+  return { start, end };
+}
+
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ import: null, configured: false });
   }
 
   try {
-    const record = await getLatestImportForAnalytics();
-    if (!record) {
-      return NextResponse.json({ import: null, configured: true });
-    }
-
     const config = {
       heldOpenThresholdSeconds: parseThreshold(request),
     };
 
-    const analysisSnapshot = await buildImportAnalysisSnapshotFromImport(
-      record,
-      config,
-    );
+    const accumulated = await buildAccumulatedImportAnalysisSnapshot(config);
 
-    if (!analysisSnapshot) {
+    if (!accumulated) {
       return NextResponse.json({ import: null, configured: true });
     }
 
+    const { imports, primaryImport, snapshot } = accumulated;
+    const timestamps = (snapshot.parsedEvents ?? [])
+      .map((event) => event.timestamp)
+      .filter((value) => Number.isFinite(value));
+
+    const reportingPeriodStart =
+      timestamps.length > 0
+        ? new Date(Math.min(...timestamps)).toISOString()
+        : primaryImport.reporting_period_start;
+    const reportingPeriodEnd =
+      timestamps.length > 0
+        ? new Date(Math.max(...timestamps)).toISOString()
+        : primaryImport.reporting_period_end;
+
+    const { start, end } = formatReportingPeriod(
+      reportingPeriodStart,
+      reportingPeriodEnd,
+    );
+
     return NextResponse.json({
       configured: true,
+      importCount: imports.length,
       import: {
-        id: record.id,
-        fileName: record.file_name,
-        rowCount: record.row_count,
-        columnCount: record.column_count,
-        headers: record.headers,
-        status: record.status,
-        uploadedAt: record.created_at,
-        source: record.source,
-        sender: record.sender,
-        analysisSnapshot,
-        reportingPeriodStart: record.reporting_period_start,
-        reportingPeriodEnd: record.reporting_period_end,
-        processingDurationMs: record.processing_duration_ms,
-        doorCount: analysisSnapshot.intelligence.summary.totalDoors,
-        incidentCount: analysisSnapshot.intelligence.summary.totalHeldOpenEvents,
+        id: primaryImport.id,
+        fileName:
+          imports.length === 1
+            ? primaryImport.file_name
+            : `Accumulated (${imports.length} imports)`,
+        rowCount: snapshot.analyzedRowCount,
+        columnCount: primaryImport.column_count,
+        headers: primaryImport.headers,
+        status: primaryImport.status,
+        uploadedAt: primaryImport.created_at,
+        source: primaryImport.source,
+        sender: primaryImport.sender,
+        analysisSnapshot: snapshot,
+        reportingPeriodStart: start,
+        reportingPeriodEnd: end,
+        processingDurationMs: primaryImport.processing_duration_ms,
+        doorCount: snapshot.intelligence.summary.totalDoors,
+        incidentCount: snapshot.intelligence.summary.totalHeldOpenEvents,
         complianceScoreSnapshot:
-          analysisSnapshot.intelligence.summary.overallComplianceScore,
+          snapshot.intelligence.summary.overallComplianceScore,
+        accumulatedImportIds: imports.map((record) => record.id),
       },
     });
   } catch (error) {

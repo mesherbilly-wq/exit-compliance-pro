@@ -11,8 +11,100 @@ import type {
 import {
   loadDoorProfilesForImport,
   loadParsedEventsForImport,
+  loadParsedEventsForImports,
 } from "@/lib/server/db/import-analytics-repository";
+import { listImportsForAnalytics } from "@/lib/server/db/latest-import";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
+
+export type AccumulatedImportAnalytics = {
+  imports: ServerImportRecord[];
+  primaryImport: ServerImportRecord;
+  snapshot: ImportAnalysisSnapshot;
+};
+
+export async function buildAccumulatedImportAnalysisSnapshot(
+  config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
+): Promise<AccumulatedImportAnalytics | null> {
+  const imports = await listImportsForAnalytics();
+
+  if (imports.length === 0) {
+    return null;
+  }
+
+  if (imports.length === 1) {
+    const primaryImport = imports[0]!;
+    const snapshot = await buildImportAnalysisSnapshotFromImport(
+      primaryImport,
+      config,
+    );
+
+    if (!snapshot) {
+      return null;
+    }
+
+    return { imports, primaryImport, snapshot };
+  }
+
+  const importIds = imports.map((record) => record.id);
+  const parsedEvents = await loadParsedEventsForImports(importIds);
+  const primaryImport = imports.at(-1)!;
+  const mapping = (primaryImport.field_mapping ?? {}) as FieldMapping;
+
+  if (parsedEvents.length === 0 || !primaryImport.field_mapping) {
+    return buildAccumulatedFromSingleImportFallback(imports, config);
+  }
+
+  const totalRowCount = imports.reduce((sum, record) => sum + record.row_count, 0);
+  const hasDurationField = imports.some((record) => record.has_duration_field);
+  const timestamps = parsedEvents
+    .map((event) => event.timestamp)
+    .filter((value) => Number.isFinite(value));
+
+  const artifacts = runFireExitIntelligenceFromParsedEvents(
+    parsedEvents,
+    primaryImport.headers,
+    [],
+    {
+      sourceFileName: formatAccumulatedSourceLabel(imports.length),
+      config,
+      analyzedRowCount: totalRowCount,
+      hasDurationField,
+      mapping,
+    },
+  );
+
+  const intelligence = normalizeIntelligenceReport(artifacts.report);
+
+  return {
+    imports,
+    primaryImport,
+    snapshot: {
+      mapping: intelligence.mapping,
+      analyzedRowCount: totalRowCount,
+      intelligence,
+      parsedEvents,
+      hasDurationField,
+    },
+  };
+}
+
+async function buildAccumulatedFromSingleImportFallback(
+  imports: ServerImportRecord[],
+  config: FireExitAnalyticsConfig,
+): Promise<AccumulatedImportAnalytics | null> {
+  const primaryImport = imports.at(-1)!;
+  const snapshot = await buildImportAnalysisSnapshotFromImport(primaryImport, config);
+
+  if (!snapshot) {
+    return null;
+  }
+
+  return { imports, primaryImport, snapshot };
+}
+
+function formatAccumulatedSourceLabel(importCount: number): string {
+  return `Accumulated (${importCount} imports)`;
+}
 
 export async function buildIntelligenceReportFromImport(
   record: ServerImportRecord,

@@ -190,11 +190,21 @@ export async function persistImportAnalytics(
 export async function loadParsedEventsForImport(
   importId: string,
 ): Promise<ParsedFireExitEvent[]> {
+  return loadParsedEventsForImports([importId]);
+}
+
+export async function loadParsedEventsForImports(
+  importIds: string[],
+): Promise<ParsedFireExitEvent[]> {
+  if (importIds.length === 0) {
+    return [];
+  }
+
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("import_parsed_events")
     .select("door, event_time, event_type, event_timestamp, csv_duration_seconds")
-    .eq("import_id", importId)
+    .in("import_id", importIds)
     .order("event_timestamp", { ascending: true });
 
   if (error) {
