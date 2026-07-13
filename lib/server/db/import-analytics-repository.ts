@@ -236,6 +236,64 @@ export async function loadParsedEventsForImports(
   }));
 }
 
+export async function loadParsedEventsGroupedByImports(
+  importIds: string[],
+): Promise<{
+  allEvents: ParsedFireExitEvent[];
+  eventsByImportId: Map<string, ParsedFireExitEvent[]>;
+}> {
+  if (importIds.length === 0) {
+    return { allEvents: [], eventsByImportId: new Map() };
+  }
+
+  const supabase = getSupabaseAdmin();
+  const pageSize = 1000;
+  const allRows: ImportParsedEventRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("import_parsed_events")
+      .select("import_id, door, event_time, event_type, event_timestamp, csv_duration_seconds")
+      .in("import_id", importIds)
+      .order("event_timestamp", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to load parsed events: ${error.message}`);
+    }
+
+    const batch = (data as ImportParsedEventRow[]) ?? [];
+    allRows.push(...batch);
+
+    if (batch.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
+  }
+
+  const eventsByImportId = new Map<string, ParsedFireExitEvent[]>();
+  const allEvents: ParsedFireExitEvent[] = [];
+
+  for (const row of allRows) {
+    const event: ParsedFireExitEvent = {
+      door: row.door,
+      eventTime: row.event_time,
+      eventType: row.event_type,
+      timestamp: row.event_timestamp,
+      csvDurationSeconds: row.csv_duration_seconds,
+    };
+
+    allEvents.push(event);
+    const bucket = eventsByImportId.get(row.import_id) ?? [];
+    bucket.push(event);
+    eventsByImportId.set(row.import_id, bucket);
+  }
+
+  return { allEvents, eventsByImportId };
+}
+
 export async function loadIncidentsForImport(
   importId: string,
 ): Promise<ComplianceIncident[]> {

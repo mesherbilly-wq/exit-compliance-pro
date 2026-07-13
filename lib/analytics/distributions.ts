@@ -62,6 +62,64 @@ export function buildDayOfWeekDistribution(
   return buckets;
 }
 
+function formatDayLabel(timestamp: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(new Date(timestamp));
+}
+
+function formatHourBucketLabel(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${String(date.getHours()).padStart(2, "0")}:00`;
+}
+
+export function buildHourlyTrend(incidents: ComplianceIncident[]): TrendPoint[] {
+  const grouped = new Map<string, TrendPoint>();
+
+  for (const incident of incidents) {
+    const date = new Date(incident.startTimestamp);
+    const periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}`;
+    const existing = grouped.get(periodKey) ?? {
+      periodKey,
+      label: formatHourBucketLabel(incident.startTimestamp),
+      heldOpenEvents: 0,
+      exposureSeconds: 0,
+    };
+
+    existing.heldOpenEvents += 1;
+    existing.exposureSeconds += incident.timeBeyondThresholdSeconds;
+    grouped.set(periodKey, existing);
+  }
+
+  return [...grouped.values()].sort((a, b) =>
+    a.periodKey.localeCompare(b.periodKey),
+  );
+}
+
+export function buildDailyTrend(incidents: ComplianceIncident[]): TrendPoint[] {
+  const grouped = new Map<string, TrendPoint>();
+
+  for (const incident of incidents) {
+    const periodKey = dateKey(incident.startTimestamp);
+    const existing = grouped.get(periodKey) ?? {
+      periodKey,
+      label: formatDayLabel(incident.startTimestamp),
+      heldOpenEvents: 0,
+      exposureSeconds: 0,
+    };
+
+    existing.heldOpenEvents += 1;
+    existing.exposureSeconds += incident.timeBeyondThresholdSeconds;
+    grouped.set(periodKey, existing);
+  }
+
+  return [...grouped.values()].sort((a, b) =>
+    a.periodKey.localeCompare(b.periodKey),
+  );
+}
+
 export function buildWeeklyTrend(incidents: ComplianceIncident[]): TrendPoint[] {
   const grouped = new Map<string, TrendPoint>();
 
