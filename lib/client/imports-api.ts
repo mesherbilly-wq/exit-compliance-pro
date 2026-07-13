@@ -10,6 +10,7 @@ import {
   mapServerImportListItem,
   type ApiImportRecord,
 } from "@/lib/client/import-types";
+import { dispatchImportsRefreshed } from "@/lib/imports/imports-refreshed";
 
 export type { ApiImportRecord };
 
@@ -74,7 +75,9 @@ export async function reprocessImportById(importId: string): Promise<ApiImportRe
   };
 
   const existing = await fetchImportById(importId);
-  return { ...existing, ...payload.import };
+  const record = { ...existing, ...payload.import };
+  dispatchImportsRefreshed();
+  return record;
 }
 
 export async function downloadFailedImportCsv(importId: string): Promise<void> {
@@ -109,6 +112,7 @@ export async function uploadManualImport(file: File): Promise<ApiImportRecord> {
   }
 
   const payload = (await response.json()) as { import: ApiImportRecord };
+  dispatchImportsRefreshed();
   return payload.import;
 }
 
@@ -121,6 +125,8 @@ export async function deleteImportById(importId: string): Promise<void> {
     const payload = (await response.json()) as { error?: string };
     throw new Error(payload.error ?? "Delete failed.");
   }
+
+  dispatchImportsRefreshed();
 }
 
 export async function updateImportMappingApi(
@@ -137,6 +143,8 @@ export async function updateImportMappingApi(
     const payload = (await response.json()) as { error?: string };
     throw new Error(payload.error ?? "Failed to update mapping.");
   }
+
+  dispatchImportsRefreshed();
 }
 
 export async function saveImportSnapshot(
@@ -170,7 +178,9 @@ export async function refreshImportAnalysis(config: {
     throw new Error(payload.error ?? "Failed to refresh import analysis.");
   }
 
-  return (await response.json()) as { refreshed: number; skipped: number };
+  const result = (await response.json()) as { refreshed: number; skipped: number };
+  dispatchImportsRefreshed();
+  return result;
 }
 
 export async function fetchLatestImport(): Promise<ApiImportRecord | null> {

@@ -8,7 +8,6 @@ import {
 } from "@/lib/analytics/config";
 import { formatDurationReadable } from "@/lib/reports/held-open-detection";
 import { refreshImportAnalysis } from "@/lib/client/imports-api";
-import { dispatchImportsRefreshed } from "@/lib/imports/imports-refreshed";
 import { InboundEmailSettingsPanel } from "@/components/settings/inbound-email-settings-panel";
 
 function buildRefreshMessage(result: {
@@ -88,7 +87,6 @@ export function SettingsContent() {
       const refreshResult = await refreshImportAnalysis({
         heldOpenThresholdSeconds: totalThresholdSeconds,
       });
-      dispatchImportsRefreshed();
       setSaved(true);
       setRefreshMessage(buildRefreshMessage(refreshResult));
     } catch {

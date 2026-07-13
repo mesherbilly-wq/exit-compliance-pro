@@ -17,7 +17,6 @@ import {
   type FieldMapping,
 } from "@/lib/imports/types";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
-import { dispatchImportsRefreshed } from "@/lib/imports/imports-refreshed";
 
 export function FieldMappingContent() {
   const { loadedImport, loaded, reload } = useLatestImport();
@@ -59,7 +58,6 @@ export function FieldMappingContent() {
 
     try {
       await updateImportMappingApi(importRecord.id, updated);
-      dispatchImportsRefreshed();
     } catch (error) {
       window.alert(
         error instanceof Error ? error.message : "Failed to save field mapping.",

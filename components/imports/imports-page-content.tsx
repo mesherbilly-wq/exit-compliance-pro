@@ -7,6 +7,7 @@ import {
   fetchImports,
   type ApiImportRecord,
 } from "@/lib/client/imports-api";
+import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 import {
   ImportStatusCards,
   RecentImportsTable,
@@ -30,6 +31,8 @@ export function ImportsPageContent() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useImportsRefreshed(reload);
 
   async function handleDeleteImport(importId: string) {
     await deleteImportById(importId);

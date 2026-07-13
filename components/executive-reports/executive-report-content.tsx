@@ -22,6 +22,7 @@ import {
 import { formatDurationLabel } from "@/lib/reports/held-open-detection";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 import { DoorLink } from "@/components/doors/door-link";
+import { ExportManagementReviewButton } from "@/components/executive-reports/export-management-review-button";
 
 const SITE_HEALTH_STYLES: Record<
   SiteHealthRating,
@@ -191,7 +192,8 @@ export function ExecutiveReportContent() {
             </div>
 
             <div className="text-right">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <ExportManagementReviewButton />
+              <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Report date
               </p>
               <p className="mt-1 text-lg font-semibold text-white">

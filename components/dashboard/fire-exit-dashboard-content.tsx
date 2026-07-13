@@ -20,6 +20,7 @@ import {
 } from "@/lib/analytics/labels";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 import { DoorLink } from "@/components/doors/door-link";
+import { ExportManagementReviewButton } from "@/components/executive-reports/export-management-review-button";
 
 const STATUS_STYLES: Record<DoorComplianceStatus, string> = {
   Compliant: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -171,13 +172,7 @@ export function FireExitDashboardContent() {
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled
-          className="cursor-not-allowed rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-500"
-        >
-          Export Management Review
-        </button>
+        <ExportManagementReviewButton label="Export Management Review" />
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
