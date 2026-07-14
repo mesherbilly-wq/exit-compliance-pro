@@ -181,7 +181,7 @@ export function ExecutiveReportContent() {
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">
-                Fire Exit Intelligence Platform
+                Reports
               </p>
               <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
                 Management Review

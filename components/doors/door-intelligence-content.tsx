@@ -26,6 +26,7 @@ import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import { useImportsRefreshed } from "@/lib/imports/imports-refreshed";
 import { DoorLink } from "@/components/doors/door-link";
+import { DoorsSectionNav } from "@/components/doors/doors-section-nav";
 
 const STATUS_STYLES: Record<DoorHealthStatus, string> = {
   Excellent: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30",
@@ -177,11 +178,13 @@ export function DoorIntelligenceContent() {
     <div className="mx-auto max-w-7xl space-y-8">
       {isPreviewOnlyAnalysis(importRecord) && <PreviewDataBanner />}
 
+      <DoorsSectionNav />
+
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-cyan-400">
-          Fire Exit Intelligence
+          Doors
         </p>
-        <h2 className="mt-3 text-3xl font-bold tracking-tight">Door Intelligence</h2>
+        <h2 className="mt-3 text-3xl font-bold tracking-tight">Door Register</h2>
         <p className="mt-4 max-w-3xl text-slate-300">
           Operational door intelligence for{" "}
           <span className="font-medium text-white">{analysis.sourceFileName}</span>.
@@ -421,14 +424,17 @@ function DoorIntelligenceEmptyState({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-5xl space-y-8">
+      <DoorsSectionNav />
+      <div>
       <p className="text-sm font-semibold uppercase tracking-wide text-cyan-400">
-        Fire Exit Intelligence
+        Doors
       </p>
-      <h2 className="mt-3 text-3xl font-bold tracking-tight">Door Intelligence</h2>
+      <h2 className="mt-3 text-3xl font-bold tracking-tight">Door Register</h2>
       <p className="mt-4 max-w-3xl text-slate-300">
         Operational intelligence for fire exit held-open exposure, risk and trend behaviour.
       </p>
+      </div>
 
       <section className="mt-10 rounded-2xl border border-dashed border-slate-700 bg-slate-900 p-10 text-center">
         <h3 className="text-lg font-semibold">{title}</h3>

@@ -2,40 +2,50 @@ export type NavItem = {
   label: string;
   href: string;
   match?: "exact" | "prefix";
+  activePaths?: string[];
 };
 
 export const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/", match: "exact" },
-  { label: "Imports", href: "/imports", match: "prefix" },
-  { label: "Door Intelligence", href: "/doors", match: "prefix" },
-  { label: "Compliance Intelligence", href: "/compliance", match: "prefix" },
+  { label: "Dashboard", href: "/", match: "exact", activePaths: ["/compliance"] },
   { label: "Attention Centre", href: "/attention", match: "prefix" },
-  { label: "Heat Maps", href: "/heat-maps", match: "prefix" },
+  {
+    label: "Doors",
+    href: "/doors",
+    match: "prefix",
+    activePaths: ["/heat-maps"],
+  },
   { label: "Trends", href: "/trends", match: "prefix" },
-  { label: "Management Review", href: "/executive-reports", match: "prefix" },
+  { label: "Reports", href: "/executive-reports", match: "prefix" },
+  { label: "Imports", href: "/imports", match: "prefix" },
   { label: "Settings", href: "/settings", match: "prefix" },
 ];
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
+  "/compliance": "Dashboard",
+  "/attention": "Attention Centre",
   "/imports": "Imports",
   "/imports/upload": "Upload CSV",
   "/imports/mapping": "Field Mapping",
-  "/doors": "Door Intelligence",
-  "/doors/profile": "Door Profile",
-  "/compliance": "Compliance Intelligence",
-  "/attention": "Attention Centre",
+  "/doors": "Doors",
   "/heat-maps": "Heat Maps",
   "/trends": "Trends",
   "/executive-reports": "Management Review",
   "/settings": "Settings",
 };
 
+function normalizePath(pathname: string): string {
+  return pathname !== "/" ? pathname.replace(/\/$/, "") : pathname;
+}
+
 export function isNavActive(pathname: string, item: NavItem): boolean {
-  const normalizedPath =
-    pathname !== "/" ? pathname.replace(/\/$/, "") : pathname;
+  const normalizedPath = normalizePath(pathname);
   const normalizedHref =
-    item.href !== "/" ? item.href.replace(/\/$/, "") : item.href;
+    item.href !== "/" ? normalizePath(item.href) : item.href;
+
+  if (item.activePaths?.includes(normalizedPath)) {
+    return true;
+  }
 
   if (item.match === "exact") {
     return normalizedPath === normalizedHref;
@@ -48,12 +58,11 @@ export function isNavActive(pathname: string, item: NavItem): boolean {
 }
 
 export function getPageTitle(pathname: string): string {
-  if (pageTitles[pathname]) {
-    return pageTitles[pathname];
-  }
+  const normalizedPath = normalizePath(pathname);
 
-  const normalizedPath =
-    pathname !== "/" ? pathname.replace(/\/$/, "") : pathname;
+  if (pageTitles[normalizedPath]) {
+    return pageTitles[normalizedPath];
+  }
 
   if (normalizedPath.startsWith("/doors/") && normalizedPath !== "/doors") {
     try {
@@ -64,9 +73,22 @@ export function getPageTitle(pathname: string): string {
     }
   }
 
+  if (normalizedPath === "/executive-reports") {
+    return "Management Review";
+  }
+
   const match = Object.entries(pageTitles)
     .filter(([path]) => path !== "/")
-    .find(([path]) => pathname.startsWith(path));
+    .find(([path]) => normalizedPath.startsWith(path));
 
   return match?.[1] ?? "Fire Exit Intelligence Platform";
+}
+
+export function isDoorsSectionPath(pathname: string): boolean {
+  const normalizedPath = normalizePath(pathname);
+  return (
+    normalizedPath === "/doors" ||
+    normalizedPath.startsWith("/doors/") ||
+    normalizedPath === "/heat-maps"
+  );
 }

@@ -105,7 +105,7 @@ export function DoorProfileContent({ doorParam }: DoorProfileContentProps) {
           href="/doors"
           className="mt-6 inline-block rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
         >
-          Back to Door Intelligence
+          Back to Doors
         </Link>
       </DoorProfileEmptyState>
     );
@@ -122,7 +122,7 @@ export function DoorProfileContent({ doorParam }: DoorProfileContentProps) {
           href="/doors"
           className="text-sm text-cyan-400 hover:text-cyan-300"
         >
-          ← Back to Door Intelligence
+          ← Back to Doors
         </Link>
 
         <p className="mt-6 text-sm font-semibold uppercase tracking-wide text-cyan-400">
@@ -392,7 +392,7 @@ function DoorProfileEmptyState({
   return (
     <div className="mx-auto max-w-5xl">
       <Link href="/doors" className="text-sm text-cyan-400 hover:text-cyan-300">
-        ← Back to Door Intelligence
+        ← Back to Doors
       </Link>
 
       <p className="mt-6 text-sm font-semibold uppercase tracking-wide text-cyan-400">

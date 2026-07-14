@@ -10,17 +10,22 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/reports",
-        destination: "/compliance",
+        destination: "/executive-reports",
         permanent: true,
       },
       {
         source: "/reports/exit-compliance",
-        destination: "/compliance",
+        destination: "/executive-reports",
         permanent: true,
       },
       {
         source: "/reports/:path*",
-        destination: "/compliance",
+        destination: "/executive-reports",
+        permanent: true,
+      },
+      {
+        source: "/compliance",
+        destination: "/",
         permanent: true,
       },
       {

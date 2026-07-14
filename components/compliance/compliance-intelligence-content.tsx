@@ -3,12 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useLatestImport } from "@/lib/client/latest-import";
-import {
-  buildComplianceIntelligenceDashboard,
-  type ComplianceIntelligenceDashboard,
-} from "@/lib/analytics/compliance-intelligence";
-import { runFireExitIntelligenceEngine } from "@/lib/analytics/fire-exit-intelligence-engine";
-import { resolveFieldMapping } from "@/lib/imports/resolve-mapping";
+import { buildComplianceDashboardFromImport } from "@/lib/analytics/load-compliance-dashboard";
 import type { ImportRecord } from "@/lib/imports/types";
 import { isPreviewOnlyAnalysis } from "@/lib/imports/types";
 import { PreviewDataBanner } from "@/components/ui/preview-data-banner";
@@ -37,43 +32,8 @@ const PRIORITY_STYLES = {
 function buildComplianceDashboard(
   latest: ImportRecord | null,
   rows: Record<string, string>[],
-): {
-  importRecord: ImportRecord | null;
-  dashboard: ComplianceIntelligenceDashboard | null;
-} {
-  if (!latest) {
-    return { importRecord: null, dashboard: null };
-  }
-
-  const savedMapping = latest.analysisSnapshot?.mapping ?? null;
-
-  if (latest.analysisSnapshot?.intelligence) {
-    return {
-      importRecord: latest,
-      dashboard: buildComplianceIntelligenceDashboard(
-        latest.analysisSnapshot.intelligence,
-      ),
-    };
-  }
-
-  const mapping = resolveFieldMapping(latest.headers, rows, savedMapping);
-  if (
-    !mapping.eventTime.trim() ||
-    !mapping.eventType.trim() ||
-    !mapping.doorName.trim()
-  ) {
-    return { importRecord: latest, dashboard: null };
-  }
-
-  const report = runFireExitIntelligenceEngine(rows, latest.headers, {
-    sourceFileName: latest.fileName,
-    savedMapping: mapping,
-  });
-
-  return {
-    importRecord: latest,
-    dashboard: buildComplianceIntelligenceDashboard(report),
-  };
+) {
+  return buildComplianceDashboardFromImport(latest, rows);
 }
 
 export function ComplianceIntelligenceContent() {

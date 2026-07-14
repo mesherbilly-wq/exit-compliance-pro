@@ -221,7 +221,7 @@ export function FieldMappingContent() {
 
         {requiredMapped ? (
           <Link
-            href="/compliance"
+            href="/"
             className="rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
           >
             View Compliance Analysis

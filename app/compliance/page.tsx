@@ -1,5 +1,5 @@
-import { ComplianceIntelligenceContent } from "@/components/compliance/compliance-intelligence-content";
+import { redirect } from "next/navigation";
 
 export default function CompliancePage() {
-  return <ComplianceIntelligenceContent />;
+  redirect("/");
 }
