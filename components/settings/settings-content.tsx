@@ -122,8 +122,9 @@ export function SettingsContent() {
         <p className="text-sm font-medium text-white">Held-open threshold</p>
         <p className="mt-1 text-sm text-slate-400">
           Only time exceeding this threshold counts toward time beyond threshold.
-          Violations are recorded when your access control export includes an
-          explicit held-open alarm event, matching Genetec reporting.
+          Incidents are detected from explicit held-open alarms in your export,
+          or when a door opened event is followed by a door closed event beyond
+          this threshold.
         </p>
 
         <div className="mt-4 grid max-w-md grid-cols-2 gap-4">

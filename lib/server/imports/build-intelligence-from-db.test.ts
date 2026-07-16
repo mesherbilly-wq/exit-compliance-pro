@@ -104,28 +104,8 @@ describe("buildComplianceIncidents threshold sensitivity", () => {
     expect(incidents).toHaveLength(0);
   });
 
-  it("finds no incidents from open-close duration alone", () => {
+  it("finds incidents when threshold is lower than open duration", () => {
     const incidents = buildComplianceIncidents(events, {
-      heldOpenThresholdSeconds: 15,
-    });
-
-    expect(incidents).toHaveLength(0);
-  });
-
-  it("finds incidents when an explicit held-open alarm is present", () => {
-    const alarmEvents = [
-      ...events.slice(0, 1),
-      {
-        door: "Test Door",
-        eventType: "Door open too long",
-        eventTime: "7/10/2026 7:00:20 AM",
-        timestamp: 1_020_000,
-        csvDurationSeconds: null,
-      },
-      events[1]!,
-    ];
-
-    const incidents = buildComplianceIncidents(alarmEvents, {
       heldOpenThresholdSeconds: 15,
     });
 
@@ -134,18 +114,7 @@ describe("buildComplianceIncidents threshold sensitivity", () => {
   });
 
   it("groups events by door before incident detection", () => {
-    const alarmEvents = [
-      ...events.slice(0, 1),
-      {
-        door: "Test Door",
-        eventType: "Door open too long",
-        eventTime: "7/10/2026 7:00:20 AM",
-        timestamp: 1_020_000,
-        csvDurationSeconds: null,
-      },
-      events[1]!,
-    ];
-    const grouped = groupEventsByDoor(alarmEvents);
+    const grouped = groupEventsByDoor(events);
     const incidents = buildComplianceIncidents(grouped.get("Test Door") ?? [], {
       heldOpenThresholdSeconds: 15,
     });

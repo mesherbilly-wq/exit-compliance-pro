@@ -27,9 +27,20 @@ function openCloseOnly(
 }
 
 describe("buildComplianceIncidents", () => {
-  it("does not create incidents from open-close duration alone", () => {
+  it("creates incidents from open-close duration when it exceeds the threshold", () => {
     const incidents = buildComplianceIncidents(
       openCloseOnly(0, 1091_000),
+      { heldOpenThresholdSeconds: THRESHOLD },
+    );
+
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]?.durationSeconds).toBe(1091);
+    expect(incidents[0]?.isExplicitAlarm).toBe(false);
+  });
+
+  it("does not create incidents at or below the threshold", () => {
+    const incidents = buildComplianceIncidents(
+      openCloseOnly(0, 25_000),
       { heldOpenThresholdSeconds: THRESHOLD },
     );
 
