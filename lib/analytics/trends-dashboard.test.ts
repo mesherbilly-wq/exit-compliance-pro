@@ -30,8 +30,10 @@ function createOpenCloseEvents(input: {
   door: string;
   startMs: number;
   openSeconds: number;
+  thresholdSeconds?: number;
 }) {
-  return [
+  const thresholdSeconds = input.thresholdSeconds ?? 15;
+  const events = [
     {
       door: input.door,
       eventType: "Door opened",
@@ -39,14 +41,27 @@ function createOpenCloseEvents(input: {
       timestamp: input.startMs,
       csvDurationSeconds: null,
     },
-    {
-      door: input.door,
-      eventType: "Door closed",
-      eventTime: new Date(input.startMs + input.openSeconds * 1000).toISOString(),
-      timestamp: input.startMs + input.openSeconds * 1000,
-      csvDurationSeconds: null,
-    },
   ];
+
+  if (input.openSeconds > thresholdSeconds) {
+    events.push({
+      door: input.door,
+      eventType: "Door open too long",
+      eventTime: new Date(input.startMs + (thresholdSeconds + 1) * 1000).toISOString(),
+      timestamp: input.startMs + (thresholdSeconds + 1) * 1000,
+      csvDurationSeconds: null,
+    });
+  }
+
+  events.push({
+    door: input.door,
+    eventType: "Door closed",
+    eventTime: new Date(input.startMs + input.openSeconds * 1000).toISOString(),
+    timestamp: input.startMs + input.openSeconds * 1000,
+    csvDurationSeconds: null,
+  });
+
+  return events;
 }
 
 function buildInput(
@@ -191,7 +206,7 @@ describe("last import comparison", () => {
 
     const refined = refineLastImportBounds(bounds!, events);
     expect(refined.startMs).toBe(events[0]!.timestamp);
-    expect(refined.endMs).toBe(events[1]!.timestamp);
+    expect(refined.endMs).toBe(events.at(-1)!.timestamp);
   });
 });
 

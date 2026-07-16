@@ -30,6 +30,13 @@ function buildSampleExecutiveReport() {
     },
     {
       door: "Rear Loading Bay",
+      eventType: "Door open too long",
+      eventTime: "7/10/2026 7:00:20 AM",
+      timestamp: 1_020_000,
+      csvDurationSeconds: null,
+    },
+    {
+      door: "Rear Loading Bay",
       eventType: "Door closed",
       eventTime: "7/10/2026 7:01:10 AM",
       timestamp: 1_070_000,

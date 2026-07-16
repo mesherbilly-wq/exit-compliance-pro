@@ -179,23 +179,6 @@ export function buildComplianceIncidents(
         incidents.push(
           finalizeActiveIncident(activeIncident, event, thresholdSeconds),
         );
-      } else if (openStart) {
-        const durationSeconds =
-          (event.timestamp - openStart.timestamp) / 1000;
-
-        if (durationSeconds > thresholdSeconds) {
-          incidents.push(
-            buildIncident(
-              event.door,
-              openStart,
-              event.timestamp,
-              event.eventTime,
-              thresholdSeconds,
-              "Held open (threshold exceeded)",
-              false,
-            ),
-          );
-        }
       }
 
       openStart = null;
