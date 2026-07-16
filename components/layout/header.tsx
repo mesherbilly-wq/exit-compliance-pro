@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getPageTitle } from "@/lib/navigation";
+import { PacificLogo } from "./pacific-logo";
 
 type HeaderProps = {
   onMenuClick: () => void;
@@ -34,6 +36,14 @@ export function Header({ onMenuClick }: HeaderProps) {
         </svg>
       </button>
 
+      <Link
+        href="/"
+        className="shrink-0 lg:hidden"
+        aria-label="Pacific Fire & Security home"
+      >
+        <PacificLogo height={32} />
+      </Link>
+
       <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white sm:text-xl">
         {title}
       </h1>
@@ -47,6 +57,14 @@ export function Header({ onMenuClick }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
+        <Link
+          href="/"
+          className="hidden shrink-0 lg:block"
+          aria-label="Pacific Fire & Security home"
+        >
+          <PacificLogo height={28} />
+        </Link>
+
         <button
           type="button"
           className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 hover:text-white"
