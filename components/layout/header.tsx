@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getPageTitle } from "@/lib/navigation";
-import { PacificLogo } from "./pacific-logo";
+import { BrandMark } from "./brand-mark";
 
 type HeaderProps = {
   onMenuClick: () => void;
@@ -39,9 +39,9 @@ export function Header({ onMenuClick }: HeaderProps) {
       <Link
         href="/"
         className="shrink-0 lg:hidden"
-        aria-label="Pacific Fire & Security home"
+        aria-label="Fire Exit Intelligence Platform home"
       >
-        <PacificLogo height={32} />
+        <BrandMark logoHeight={32} compact />
       </Link>
 
       <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-white sm:text-xl">
@@ -60,9 +60,9 @@ export function Header({ onMenuClick }: HeaderProps) {
         <Link
           href="/"
           className="hidden shrink-0 lg:block"
-          aria-label="Pacific Fire & Security home"
+          aria-label="Fire Exit Intelligence Platform home"
         >
-          <PacificLogo height={28} />
+          <BrandMark logoHeight={28} compact className="flex flex-col items-end" />
         </Link>
 
         <button

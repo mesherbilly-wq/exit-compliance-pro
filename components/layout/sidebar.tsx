@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isNavActive, navItems } from "@/lib/navigation";
-import { PacificLogo } from "./pacific-logo";
+import { BrandMark } from "./brand-mark";
 
 type SidebarProps = {
   onNavigate?: () => void;
@@ -19,9 +19,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           href="/"
           onClick={onNavigate}
           className="block"
-          aria-label="Pacific Fire & Security home"
+          aria-label="Fire Exit Intelligence Platform home"
         >
-          <PacificLogo height={40} />
+          <BrandMark logoHeight={40} />
         </Link>
       </div>
 
