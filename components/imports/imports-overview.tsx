@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ApiImportRecord } from "@/lib/client/import-types";
 import {
   downloadFailedImportCsv,
@@ -55,7 +55,8 @@ export function ImportStatusCards({ imports }: ImportStatusCardsProps) {
 
 type RecentImportsTableProps = {
   imports: ApiImportRecord[];
-  onDelete: (importId: string) => void;
+  onDelete: (importId: string) => void | Promise<void>;
+  onDeleteMany: (importIds: string[]) => void | Promise<void>;
   onRefresh: () => void;
 };
 
@@ -344,8 +345,71 @@ function ImportActionsMenu({
 export function RecentImportsTable({
   imports,
   onDelete,
+  onDeleteMany,
   onRefresh,
 }: RecentImportsTableProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const allSelected =
+    imports.length > 0 && imports.every((item) => selectedIds.has(item.id));
+  const selectedCount = selectedIds.size;
+
+  const selectedImports = useMemo(
+    () => imports.filter((item) => selectedIds.has(item.id)),
+    [imports, selectedIds],
+  );
+
+  function toggleOne(importId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(importId)) {
+        next.delete(importId);
+      } else {
+        next.add(importId);
+      }
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+
+    setSelectedIds(new Set(imports.map((item) => item.id)));
+  }
+
+  async function handleBulkDelete() {
+    if (selectedCount === 0) {
+      return;
+    }
+
+    const label =
+      selectedCount === 1
+        ? `"${selectedImports[0]?.fileName ?? "this import"}"`
+        : `${selectedCount} imports`;
+
+    const confirmed = window.confirm(
+      `Delete ${label}? This will remove the selected imports, all incidents, statistics, and compliance data.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      await onDeleteMany([...selectedIds]);
+      setSelectedIds(new Set());
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Delete failed.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   if (imports.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900 p-10 text-center">
@@ -361,10 +425,46 @@ export function RecentImportsTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
+    <div className="space-y-3">
+      {selectedCount > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+          <p className="text-sm text-slate-300">
+            {selectedCount} import{selectedCount === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              disabled={bulkDeleting}
+              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Clear selection
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="rounded-lg bg-red-500/15 px-3 py-1.5 text-sm font-medium text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/25 disabled:opacity-50"
+            >
+              {bulkDeleting ? "Deleting..." : `Delete selected (${selectedCount})`}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
       <table className="min-w-full text-left text-sm">
         <thead className="border-b border-slate-700 text-slate-300">
           <tr>
+            <th className="px-4 py-3 font-medium">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                aria-label="Select all imports"
+                className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-cyan-500 focus:ring-cyan-500"
+              />
+            </th>
             <th className="px-4 py-3 font-medium">Status</th>
             <th className="px-4 py-3 font-medium">Source</th>
             <th className="px-4 py-3 font-medium">Reporting period</th>
@@ -378,7 +478,21 @@ export function RecentImportsTable({
         </thead>
         <tbody>
           {imports.map((item) => (
-            <tr key={item.id} className="border-b border-slate-800 last:border-0">
+            <tr
+              key={item.id}
+              className={`border-b border-slate-800 last:border-0 ${
+                selectedIds.has(item.id) ? "bg-cyan-500/5" : ""
+              }`}
+            >
+              <td className="px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(item.id)}
+                  onChange={() => toggleOne(item.id)}
+                  aria-label={`Select ${item.fileName}`}
+                  className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-cyan-500 focus:ring-cyan-500"
+                />
+              </td>
               <td className="px-4 py-3">
                 <span
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${statusBadgeClass(item.status)}`}
@@ -415,6 +529,7 @@ export function RecentImportsTable({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

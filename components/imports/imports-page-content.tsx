@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   deleteImportById,
+  deleteImportsByIds,
   fetchImports,
   type ApiImportRecord,
 } from "@/lib/client/imports-api";
@@ -37,6 +38,12 @@ export function ImportsPageContent() {
   async function handleDeleteImport(importId: string) {
     await deleteImportById(importId);
     setImports((current) => current.filter((item) => item.id !== importId));
+  }
+
+  async function handleDeleteImports(importIds: string[]) {
+    await deleteImportsByIds(importIds);
+    const deleted = new Set(importIds);
+    setImports((current) => current.filter((item) => !deleted.has(item.id)));
   }
 
   if (!loaded) {
@@ -83,6 +90,7 @@ export function ImportsPageContent() {
         <RecentImportsTable
           imports={imports}
           onDelete={handleDeleteImport}
+          onDeleteMany={handleDeleteImports}
           onRefresh={reload}
         />
       </section>

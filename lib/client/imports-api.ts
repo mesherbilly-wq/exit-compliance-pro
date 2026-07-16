@@ -116,7 +116,7 @@ export async function uploadManualImport(file: File): Promise<ApiImportRecord> {
   return payload.import;
 }
 
-export async function deleteImportById(importId: string): Promise<void> {
+async function deleteImportRequest(importId: string): Promise<void> {
   const response = await fetch(`/api/imports/${importId}`, {
     method: "DELETE",
   });
@@ -125,7 +125,29 @@ export async function deleteImportById(importId: string): Promise<void> {
     const payload = (await response.json()) as { error?: string };
     throw new Error(payload.error ?? "Delete failed.");
   }
+}
 
+export async function deleteImportsByIds(importIds: string[]): Promise<void> {
+  if (importIds.length === 0) {
+    return;
+  }
+
+  const results = await Promise.allSettled(
+    importIds.map((importId) => deleteImportRequest(importId)),
+  );
+
+  const failures = results.filter((result) => result.status === "rejected");
+  if (failures.length > 0) {
+    throw new Error(
+      `Failed to delete ${failures.length} of ${importIds.length} imports.`,
+    );
+  }
+
+  dispatchImportsRefreshed();
+}
+
+export async function deleteImportById(importId: string): Promise<void> {
+  await deleteImportRequest(importId);
   dispatchImportsRefreshed();
 }
 
