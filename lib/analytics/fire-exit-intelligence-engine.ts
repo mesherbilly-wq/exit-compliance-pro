@@ -7,6 +7,7 @@ import { buildDoorIntelligenceProfile } from "./scoring";
 import { buildComplianceIncidents } from "./compliance-incidents";
 import { groupEventsByDoor, parseFireExitEvents } from "./parse-events";
 import type {
+  ComplianceIncident,
   FireExitAnalyticsConfig,
   FireExitIntelligenceReport,
   FireExitPortfolioSummary,
@@ -61,6 +62,7 @@ function buildReportFromEvents(
   sourceFileName: string,
   analyzedRowCount: number,
   hasDurationField: boolean,
+  incidentsByDoor?: Map<string, ComplianceIncident[]>,
 ): FireExitIntelligenceReport {
   const grouped = groupEventsByDoor(events);
 
@@ -68,7 +70,9 @@ function buildReportFromEvents(
     .sort((a, b) => a.localeCompare(b))
     .map((door) => {
       const doorEvents = grouped.get(door) ?? [];
-      const incidents = buildComplianceIncidents(doorEvents, config);
+      const incidents =
+        incidentsByDoor?.get(door) ??
+        buildComplianceIncidents(doorEvents, config);
       const totalFireExitEvents = doorEvents.length;
 
       return buildDoorIntelligenceProfile(door, totalFireExitEvents, incidents);
@@ -152,6 +156,7 @@ export function runFireExitIntelligenceFromParsedEvents(
     analyzedRowCount: number;
     hasDurationField: boolean;
     mapping?: FieldMapping;
+    incidentsByDoor?: Map<string, ComplianceIncident[]>;
   },
 ): FireExitIntelligenceArtifacts {
   const config = options.config ?? getAnalyticsConfig();
@@ -169,6 +174,7 @@ export function runFireExitIntelligenceFromParsedEvents(
     options.sourceFileName,
     options.analyzedRowCount,
     options.hasDurationField,
+    options.incidentsByDoor,
   );
 
   return {

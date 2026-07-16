@@ -3,6 +3,10 @@ import {
   isDoorOpenedEvent,
 } from "@/lib/reports/door-event-analysis";
 import { isHeldOpenEvent } from "@/lib/reports/held-open-detection";
+import {
+  logDoorOpenClosePairings,
+  pairDoorOpenCloseSessions,
+} from "./door-open-close-pairing";
 import type {
   ComplianceIncident,
   FireExitAnalyticsConfig,
@@ -166,6 +170,11 @@ export function buildComplianceIncidents(
   const incidents: ComplianceIncident[] = [];
   let openStart: ParsedFireExitEvent | null = null;
   let activeIncident: ActiveIncidentState | null = null;
+
+  if (process.env.DOOR_PAIRING_DEBUG === "1" && events.length > 0) {
+    logDoorOpenClosePairings(events[0]!.door, events);
+    pairDoorOpenCloseSessions(events, { debug: true });
+  }
 
   for (const event of events) {
     if (isDoorOpenedEvent(event.eventType)) {

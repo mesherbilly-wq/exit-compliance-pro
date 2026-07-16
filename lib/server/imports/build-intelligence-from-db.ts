@@ -11,8 +11,12 @@ import type {
 import {
   loadDoorProfilesForImport,
   loadParsedEventsForImport,
-  loadParsedEventsForImports,
+  loadParsedEventsGroupedByImports,
 } from "@/lib/server/db/import-analytics-repository";
+import {
+  buildDedupedEventsFromImportGroups,
+  buildIncidentsByDoorFromImportGroups,
+} from "@/lib/analytics/build-incidents-from-imports";
 import { listImportsForAnalytics } from "@/lib/server/db/latest-import";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 
@@ -46,7 +50,12 @@ export async function buildAccumulatedImportAnalysisSnapshot(
   }
 
   const importIds = imports.map((record) => record.id);
-  const parsedEvents = await loadParsedEventsForImports(importIds);
+  const { eventsByImportId } = await loadParsedEventsGroupedByImports(importIds);
+  const parsedEvents = buildDedupedEventsFromImportGroups(eventsByImportId);
+  const incidentsByDoor = buildIncidentsByDoorFromImportGroups(
+    eventsByImportId,
+    config,
+  );
   const primaryImport = imports.at(-1)!;
   const mapping = (primaryImport.field_mapping ?? {}) as FieldMapping;
 
@@ -70,6 +79,7 @@ export async function buildAccumulatedImportAnalysisSnapshot(
       analyzedRowCount: totalRowCount,
       hasDurationField,
       mapping,
+      incidentsByDoor,
     },
   );
 
