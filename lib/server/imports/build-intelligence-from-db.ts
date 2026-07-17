@@ -1,6 +1,10 @@
 import type { FieldMapping } from "@/lib/imports/types";
 import type { ImportAnalysisSnapshot } from "@/lib/imports/types";
 import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
+import {
+  buildCanonicalIncidentsByDoor,
+  type ImportContext,
+} from "@/lib/analytics/canonical-incident-engine";
 import { runFireExitIntelligenceFromParsedEvents } from "@/lib/analytics/fire-exit-intelligence-engine";
 import { normalizeIntelligenceReport } from "@/lib/analytics/normalize-intelligence";
 import type {
@@ -13,10 +17,6 @@ import {
   loadParsedEventsForImport,
   loadParsedEventsGroupedByImports,
 } from "@/lib/server/db/import-analytics-repository";
-import {
-  buildDedupedEventsFromImportGroups,
-  buildIncidentsByDoorFromImportGroups,
-} from "@/lib/analytics/build-incidents-from-imports";
 import { listImportsForAnalytics } from "@/lib/server/db/latest-import";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 
@@ -25,6 +25,60 @@ export type AccumulatedImportAnalytics = {
   primaryImport: ServerImportRecord;
   snapshot: ImportAnalysisSnapshot;
 };
+
+function toImportContext(record: ServerImportRecord): ImportContext {
+  return {
+    importId: record.id,
+    reportingPeriodStart: record.reporting_period_start,
+    reportingPeriodEnd: record.reporting_period_end,
+    createdAt: record.created_at,
+  };
+}
+
+function buildImportContextMap(
+  imports: ServerImportRecord[],
+): Map<string, ImportContext> {
+  return new Map(imports.map((record) => [record.id, toImportContext(record)]));
+}
+
+function runIntelligenceWithCanonicalIncidents(input: {
+  eventsByImportId: Map<string, ParsedFireExitEvent[]>;
+  importContexts: Map<string, ImportContext>;
+  config: FireExitAnalyticsConfig;
+  headers: string[];
+  sourceFileName: string;
+  analyzedRowCount: number;
+  hasDurationField: boolean;
+  mapping: FieldMapping;
+}): {
+  intelligence: FireExitIntelligenceReport;
+  parsedEvents: ParsedFireExitEvent[];
+} {
+  const canonical = buildCanonicalIncidentsByDoor({
+    eventsByImportId: input.eventsByImportId,
+    importContexts: input.importContexts,
+    config: input.config,
+  });
+
+  const artifacts = runFireExitIntelligenceFromParsedEvents(
+    canonical.dedupedEvents,
+    input.headers,
+    [],
+    {
+      sourceFileName: input.sourceFileName,
+      config: input.config,
+      analyzedRowCount: input.analyzedRowCount,
+      hasDurationField: input.hasDurationField,
+      mapping: input.mapping,
+      incidentsByDoor: canonical.incidentsByDoor,
+    },
+  );
+
+  return {
+    intelligence: normalizeIntelligenceReport(artifacts.report),
+    parsedEvents: canonical.dedupedEvents,
+  };
+}
 
 export async function buildAccumulatedImportAnalysisSnapshot(
   config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
@@ -35,55 +89,37 @@ export async function buildAccumulatedImportAnalysisSnapshot(
     return null;
   }
 
-  if (imports.length === 1) {
-    const primaryImport = imports[0]!;
-    const snapshot = await buildImportAnalysisSnapshotFromImport(
-      primaryImport,
-      config,
-    );
-
-    if (!snapshot) {
-      return null;
-    }
-
-    return { imports, primaryImport, snapshot };
-  }
-
   const importIds = imports.map((record) => record.id);
+  const importContexts = buildImportContextMap(imports);
   const { eventsByImportId } = await loadParsedEventsGroupedByImports(importIds);
-  const parsedEvents = buildDedupedEventsFromImportGroups(eventsByImportId);
-  const incidentsByDoor = buildIncidentsByDoorFromImportGroups(
-    eventsByImportId,
-    config,
-  );
   const primaryImport = imports.at(-1)!;
   const mapping = (primaryImport.field_mapping ?? {}) as FieldMapping;
 
-  if (parsedEvents.length === 0 || !primaryImport.field_mapping) {
+  const totalEvents = [...eventsByImportId.values()].reduce(
+    (sum, events) => sum + events.length,
+    0,
+  );
+
+  if (totalEvents === 0 || !primaryImport.field_mapping) {
     return buildAccumulatedFromSingleImportFallback(imports, config);
   }
 
   const totalRowCount = imports.reduce((sum, record) => sum + record.row_count, 0);
   const hasDurationField = imports.some((record) => record.has_duration_field);
-  const timestamps = parsedEvents
-    .map((event) => event.timestamp)
-    .filter((value) => Number.isFinite(value));
 
-  const artifacts = runFireExitIntelligenceFromParsedEvents(
-    parsedEvents,
-    primaryImport.headers,
-    [],
-    {
-      sourceFileName: formatAccumulatedSourceLabel(imports.length),
-      config,
-      analyzedRowCount: totalRowCount,
-      hasDurationField,
-      mapping,
-      incidentsByDoor,
-    },
-  );
-
-  const intelligence = normalizeIntelligenceReport(artifacts.report);
+  const { intelligence, parsedEvents } = runIntelligenceWithCanonicalIncidents({
+    eventsByImportId,
+    importContexts,
+    config,
+    headers: primaryImport.headers,
+    sourceFileName:
+      imports.length === 1
+        ? primaryImport.file_name
+        : formatAccumulatedSourceLabel(imports.length),
+    analyzedRowCount: totalRowCount,
+    hasDurationField,
+    mapping,
+  });
 
   return {
     imports,
@@ -126,20 +162,21 @@ export async function buildIntelligenceReportFromImport(
 
   if (parsedEvents.length > 0 && record.field_mapping) {
     const mapping = record.field_mapping as FieldMapping;
-    const artifacts = runFireExitIntelligenceFromParsedEvents(
-      parsedEvents,
-      record.headers,
-      [],
-      {
-        sourceFileName: record.file_name,
-        config,
-        analyzedRowCount: record.row_count,
-        hasDurationField: record.has_duration_field ?? false,
-        mapping,
-      },
-    );
+    const eventsByImportId = new Map([[record.id, parsedEvents]]);
+    const importContexts = new Map([[record.id, toImportContext(record)]]);
 
-    return normalizeIntelligenceReport(artifacts.report);
+    const { intelligence } = runIntelligenceWithCanonicalIncidents({
+      eventsByImportId,
+      importContexts,
+      config,
+      headers: record.headers,
+      sourceFileName: record.file_name,
+      analyzedRowCount: record.row_count,
+      hasDurationField: record.has_duration_field ?? false,
+      mapping,
+    });
+
+    return intelligence;
   }
 
   const doors = await loadDoorProfilesForImport(record.id);

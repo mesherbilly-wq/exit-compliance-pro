@@ -51,6 +51,8 @@ export type ServerImportRecord = {
   failed_csv_retention_until: string | null;
   has_analytics: boolean;
   has_duration_field: boolean;
+  analytics_engine_version?: string | null;
+  analytics_threshold_seconds?: number | null;
   inbound_emails?: {
     from_address: string;
     subject: string | null;

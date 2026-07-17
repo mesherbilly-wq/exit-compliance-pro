@@ -1,7 +1,28 @@
 import type { ParsedFireExitEvent } from "./types";
 
+const DEFAULT_SOURCE_SYSTEM = "genetec";
+
+/**
+ * Stable dedupe key for events that may appear in overlapping hourly imports.
+ * Import ID is intentionally excluded — the same physical event can repeat.
+ */
 export function getParsedEventKey(event: ParsedFireExitEvent): string {
-  return `${event.door}|${event.timestamp}|${event.eventType}|${event.eventTime}`;
+  const parts = [
+    event.sourceSystem ?? DEFAULT_SOURCE_SYSTEM,
+    event.site ?? "",
+    event.door,
+    String(event.timestamp),
+    event.eventType,
+    event.eventTime,
+  ];
+
+  if (event.sourceEventId) {
+    parts.push(`event:${event.sourceEventId}`);
+  } else if (event.sourceRowNumber != null) {
+    parts.push(`row:${event.sourceRowNumber}`);
+  }
+
+  return parts.join("|");
 }
 
 export function dedupeParsedEvents(
@@ -23,9 +44,9 @@ export function dedupeParsedEvents(
   return deduped;
 }
 
-export function dedupeIncidents<T extends { door: string; startTimestamp: number; endTimestamp: number }>(
-  incidents: T[],
-): T[] {
+export function dedupeIncidents<
+  T extends { door: string; startTimestamp: number; endTimestamp: number },
+>(incidents: T[]): T[] {
   const seen = new Set<string>();
   const deduped: T[] = [];
 
@@ -40,4 +61,14 @@ export function dedupeIncidents<T extends { door: string; startTimestamp: number
   }
 
   return deduped;
+}
+
+export function attachImportMetadata(
+  events: ParsedFireExitEvent[],
+  importId: string,
+): ParsedFireExitEvent[] {
+  return events.map((event) => ({
+    ...event,
+    sourceImportId: event.sourceImportId ?? importId,
+  }));
 }

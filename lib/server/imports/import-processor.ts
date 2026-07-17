@@ -15,6 +15,7 @@ import { getFailedCsvRetentionDays, getSupabaseStorageBucket } from "@/lib/serve
 import { sanitizeAttachmentFileName } from "@/lib/server/inbound-email/attachment-validation";
 import { processCsvImport } from "@/lib/server/imports/process-csv-import";
 import { runFireExitIntelligenceFromParsedEvents } from "@/lib/analytics/fire-exit-intelligence-engine";
+import { buildCanonicalIncidentsByDoor } from "@/lib/analytics/canonical-incident-engine";
 import { toImportAnalysisSnapshot } from "@/lib/imports/import-analysis";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 import {
@@ -63,6 +64,8 @@ async function finalizeSuccessfulImport(
     reportingPeriodStart: record.reporting_period_start,
     reportingPeriodEnd: record.reporting_period_end,
     hasDurationField: record.has_duration_field,
+    analyticsEngineVersion: record.analytics_engine_version ?? null,
+    analyticsThresholdSeconds: record.analytics_threshold_seconds ?? null,
   });
 
   logger.info(`Import finalized in ${processingDurationMs}ms.`);
@@ -149,6 +152,7 @@ export async function completeImportProcessing(
     importId,
     intelligence: result.analysisSnapshot.intelligence,
     parsedEvents: result.analysisSnapshot.parsedEvents ?? [],
+    analyticsThresholdSeconds: input.config?.heldOpenThresholdSeconds,
   });
 
   logger.info(
@@ -171,6 +175,8 @@ export async function completeImportProcessing(
     reporting_period_end: analytics.reportingPeriodEnd,
     has_duration_field: result.analysisSnapshot.hasDurationField ?? false,
     has_analytics: true,
+    analytics_engine_version: analytics.analyticsEngineVersion,
+    analytics_threshold_seconds: analytics.analyticsThresholdSeconds,
   };
 
   return finalizeSuccessfulImport(importId, interimRecord, logger, startedAt);
@@ -250,8 +256,25 @@ export async function reprocessImport(
     parsedEvents = result.analysisSnapshot.parsedEvents ?? [];
   } else if (parsedEvents.length > 0) {
     const mapping = (existing.field_mapping ?? {}) as FieldMapping;
+    const eventsByImportId = new Map([[importId, parsedEvents]]);
+    const importContexts = new Map([
+      [
+        importId,
+        {
+          importId,
+          reportingPeriodStart: existing.reporting_period_start,
+          reportingPeriodEnd: existing.reporting_period_end,
+          createdAt: existing.created_at,
+        },
+      ],
+    ]);
+    const canonical = buildCanonicalIncidentsByDoor({
+      eventsByImportId,
+      importContexts,
+      config: config ?? { heldOpenThresholdSeconds: 30 },
+    });
     const artifacts = runFireExitIntelligenceFromParsedEvents(
-      parsedEvents,
+      canonical.dedupedEvents,
       existing.headers,
       [],
       {
@@ -260,6 +283,7 @@ export async function reprocessImport(
         analyzedRowCount: existing.row_count,
         hasDurationField: existing.has_duration_field ?? false,
         mapping,
+        incidentsByDoor: canonical.incidentsByDoor,
       },
     );
 
@@ -269,6 +293,7 @@ export async function reprocessImport(
       artifacts.parsedEvents,
       artifacts.hasDurationField,
     );
+    parsedEvents = artifacts.parsedEvents;
     logger.info("Rebuilt analytics from stored parsed events.");
   } else {
     throw new Error("No CSV or parsed events available for reprocessing.");
@@ -278,6 +303,7 @@ export async function reprocessImport(
     importId,
     intelligence: analysisSnapshot.intelligence,
     parsedEvents,
+    analyticsThresholdSeconds: config?.heldOpenThresholdSeconds,
   });
 
   logger.info(
@@ -311,6 +337,8 @@ export async function reprocessImport(
     reporting_period_end: analytics.reportingPeriodEnd,
     has_duration_field: analysisSnapshot.hasDurationField ?? false,
     has_analytics: true,
+    analytics_engine_version: analytics.analyticsEngineVersion,
+    analytics_threshold_seconds: analytics.analyticsThresholdSeconds,
   };
 
   return finalizeSuccessfulImport(importId, interimRecord, logger, startedAt);

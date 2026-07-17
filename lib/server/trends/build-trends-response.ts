@@ -69,6 +69,17 @@ export async function buildTrendsApiResponse(input: {
     createdAt: record.created_at,
     fileName: record.file_name,
   }));
+  const importContexts = new Map(
+    imports.map((record) => [
+      record.id,
+      {
+        importId: record.id,
+        reportingPeriodStart: record.reporting_period_start,
+        reportingPeriodEnd: record.reporting_period_end,
+        createdAt: record.created_at,
+      },
+    ]),
+  );
 
   const resolved = resolveTrendsPeriodBounds({
     preset,
@@ -121,6 +132,7 @@ export async function buildTrendsApiResponse(input: {
   const dashboard = buildTrendsDashboard({
     allEvents,
     eventsByImportId,
+    importContexts,
     metadata: {
       headers: primaryImport.headers,
       mapping,

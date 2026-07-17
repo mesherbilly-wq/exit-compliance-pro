@@ -1,5 +1,7 @@
 import type { FieldMapping } from "@/lib/imports/types";
 import type { DoorHealthStatus } from "@/lib/reports/held-open-detection";
+import type { IncidentClassification } from "./incident-classification";
+import type { IncidentTrace } from "./incident-trace";
 
 export type RiskRating = "Low" | "Medium" | "High" | "Critical";
 
@@ -41,7 +43,10 @@ export type ComplianceIncident = {
   dayStarted: string;
   hourStarted: number;
   isExplicitAlarm: boolean;
+  /** Display label — native alarm text or derived threshold label */
   eventType: string;
+  classification: IncidentClassification;
+  trace?: IncidentTrace;
 };
 
 /** @deprecated Use ComplianceIncident */
@@ -163,4 +168,14 @@ export type ParsedFireExitEvent = {
   eventTime: string;
   timestamp: number;
   csvDurationSeconds: number | null;
+  /** Import that stored/parsed this event */
+  sourceImportId?: string;
+  /** 1-based CSV line number (header = row 1, first data row = 2) */
+  sourceRowNumber?: number;
+  /** Monotonic parse order within an import (0-based) */
+  sourceSequence?: number;
+  /** Vendor event identifier when present in source export */
+  sourceEventId?: string;
+  sourceSystem?: string;
+  site?: string;
 };

@@ -4,9 +4,17 @@ import {
 } from "@/lib/reports/door-event-analysis";
 import { isHeldOpenEvent } from "@/lib/reports/held-open-detection";
 import {
+  classificationFromExplicitAlarm,
+  getIncidentDisplayLabel,
+} from "./incident-classification";
+import { buildIncidentTrace } from "./incident-trace";
+import { dedupeIncidents } from "./dedupe-parsed-events";
+import {
   logDoorOpenClosePairings,
   pairDoorOpenCloseSessions,
+  type DoorOpenCloseSession,
 } from "./door-open-close-pairing";
+import { sortEventsDeterministic } from "./sort-events";
 import type {
   ComplianceIncident,
   FireExitAnalyticsConfig,
@@ -23,6 +31,10 @@ type ActiveIncidentState = {
   thresholdCrossedTimestamp: number;
   triggerEventType: string;
   isExplicitAlarm: boolean;
+};
+
+export type BuildComplianceIncidentsOptions = {
+  includeTrace?: boolean;
 };
 
 export function getIncidentDurationBucket(
@@ -85,12 +97,15 @@ function formatTimestampLabel(timestamp: number, fallback: string): string {
 function buildIncident(
   door: string,
   openStart: ParsedFireExitEvent,
-  endTimestamp: number,
-  endTimeLabel: string,
+  endEvent: ParsedFireExitEvent,
   thresholdSeconds: number,
-  triggerEventType: string,
   isExplicitAlarm: boolean,
+  nativeEventType: string,
+  qualificationReason: string,
+  options?: BuildComplianceIncidentsOptions,
 ): ComplianceIncident {
+  const endTimestamp = endEvent.timestamp;
+  const endTimeLabel = endEvent.eventTime;
   const durationSeconds = Math.max(
     0,
     (endTimestamp - openStart.timestamp) / 1000,
@@ -106,8 +121,9 @@ function buildIncident(
       ? thresholdCrossedTimestamp
       : openStart.timestamp;
   const startDate = new Date(startTimestamp);
+  const classification = classificationFromExplicitAlarm(isExplicitAlarm);
 
-  return {
+  const incident: ComplianceIncident = {
     door,
     startTimestamp,
     endTimestamp,
@@ -121,23 +137,40 @@ function buildIncident(
     dayStarted: DAY_LABELS[startDate.getDay()] ?? "N/A",
     hourStarted: startDate.getHours(),
     isExplicitAlarm,
-    eventType: triggerEventType,
+    classification,
+    eventType: getIncidentDisplayLabel(classification, nativeEventType),
   };
+
+  if (options?.includeTrace) {
+    incident.trace = buildIncidentTrace({
+      openEvent: openStart,
+      closeEvent: endEvent,
+      durationSeconds,
+      thresholdSeconds,
+      timeBeyondThresholdSeconds,
+      classification,
+      qualificationReason,
+    });
+  }
+
+  return incident;
 }
 
 function finalizeActiveIncident(
   active: ActiveIncidentState,
   endEvent: ParsedFireExitEvent,
   thresholdSeconds: number,
+  options?: BuildComplianceIncidentsOptions,
 ): ComplianceIncident {
   return buildIncident(
     active.door,
     active.openStart,
-    endEvent.timestamp,
-    endEvent.eventTime,
+    endEvent,
     thresholdSeconds,
-    active.triggerEventType,
     active.isExplicitAlarm,
+    active.triggerEventType,
+    "Native held-open alarm followed door open until close",
+    options,
   );
 }
 
@@ -162,21 +195,19 @@ function tryStartActiveIncident(
   };
 }
 
-export function buildComplianceIncidents(
+/** Native held-open alarm incidents only (explicit alarms and orphan alarms). */
+export function buildNativeAlarmIncidents(
   events: ParsedFireExitEvent[],
   config: FireExitAnalyticsConfig,
+  options?: BuildComplianceIncidentsOptions,
 ): ComplianceIncident[] {
   const thresholdSeconds = config.heldOpenThresholdSeconds;
+  const sorted = sortEventsDeterministic(events);
   const incidents: ComplianceIncident[] = [];
   let openStart: ParsedFireExitEvent | null = null;
   let activeIncident: ActiveIncidentState | null = null;
 
-  if (process.env.DOOR_PAIRING_DEBUG === "1" && events.length > 0) {
-    logDoorOpenClosePairings(events[0]!.door, events);
-    pairDoorOpenCloseSessions(events, { debug: true });
-  }
-
-  for (const event of events) {
+  for (const event of sorted) {
     if (isDoorOpenedEvent(event.eventType)) {
       openStart = event;
       activeIncident = null;
@@ -186,25 +217,13 @@ export function buildComplianceIncidents(
     if (isDoorClosedEvent(event.eventType)) {
       if (activeIncident && openStart) {
         incidents.push(
-          finalizeActiveIncident(activeIncident, event, thresholdSeconds),
+          finalizeActiveIncident(
+            activeIncident,
+            event,
+            thresholdSeconds,
+            options,
+          ),
         );
-      } else if (openStart) {
-        const durationSeconds =
-          (event.timestamp - openStart.timestamp) / 1000;
-
-        if (durationSeconds > thresholdSeconds) {
-          incidents.push(
-            buildIncident(
-              event.door,
-              openStart,
-              event.timestamp,
-              event.eventTime,
-              thresholdSeconds,
-              "Held open (threshold exceeded)",
-              false,
-            ),
-          );
-        }
       }
 
       openStart = null;
@@ -237,20 +256,93 @@ export function buildComplianceIncidents(
         eventTime: event.eventTime,
         timestamp: inferredOpenTimestamp,
         csvDurationSeconds: null,
+        sourceImportId: event.sourceImportId,
+        sourceRowNumber: event.sourceRowNumber,
+        sourceSequence: event.sourceSequence,
+        sourceEventId: event.sourceEventId,
+        sourceSystem: event.sourceSystem,
+        site: event.site,
       };
 
       incidents.push(
         buildIncident(
           event.door,
           syntheticOpen,
-          event.timestamp,
-          event.eventTime,
+          event,
           thresholdSeconds,
-          event.eventType,
           true,
+          event.eventType,
+          "Native held-open alarm with CSV duration exceeding threshold",
+          options,
         ),
       );
     }
+  }
+
+  return incidents;
+}
+
+/**
+ * Canonical per-door incident builder: native alarms + derived open/close pairs.
+ */
+export function buildComplianceIncidents(
+  events: ParsedFireExitEvent[],
+  config: FireExitAnalyticsConfig,
+  options?: BuildComplianceIncidentsOptions,
+): ComplianceIncident[] {
+  if (process.env.DOOR_PAIRING_DEBUG === "1" && events.length > 0) {
+    logDoorOpenClosePairings(events[0]!.door, events);
+    pairDoorOpenCloseSessions(events, { debug: true });
+  }
+
+  const sorted = sortEventsDeterministic(events);
+  const native = buildNativeAlarmIncidents(sorted, config, options);
+  const pairing = pairDoorOpenCloseSessions(sorted);
+  const derived = buildDerivedIncidentsFromSessions(
+    pairing.sessions,
+    config,
+    options,
+  ).filter(
+    (incident) =>
+      !native.some(
+        (nativeIncident) =>
+          nativeIncident.door === incident.door &&
+          nativeIncident.endTimestamp === incident.endTimestamp,
+      ),
+  );
+
+  return dedupeIncidents([...native, ...derived]).sort(
+    (a, b) => a.startTimestamp - b.startTimestamp,
+  );
+}
+
+export function buildDerivedIncidentsFromSessions(
+  sessions: DoorOpenCloseSession[],
+  config: FireExitAnalyticsConfig,
+  options?: BuildComplianceIncidentsOptions,
+): ComplianceIncident[] {
+  const thresholdSeconds = config.heldOpenThresholdSeconds;
+  const incidents: ComplianceIncident[] = [];
+
+  for (const session of sessions) {
+    if (session.durationSeconds <= thresholdSeconds) {
+      continue;
+    }
+
+    incidents.push(
+      buildIncident(
+        session.door,
+        session.openEvent,
+        session.closeEvent,
+        thresholdSeconds,
+        false,
+        "",
+        session.crossImport
+          ? "Cross-import open/close duration exceeded configured threshold"
+          : "Open/close duration exceeded configured threshold",
+        options,
+      ),
+    );
   }
 
   return incidents;

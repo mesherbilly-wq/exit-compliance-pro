@@ -1,6 +1,10 @@
 import type { FieldMapping } from "@/lib/imports/types";
 import { buildExecutiveReport, type ExecutiveReport } from "@/lib/analytics/executive-report";
 import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
+import {
+  buildCanonicalIncidentsByDoor,
+  type ImportContext,
+} from "@/lib/analytics/canonical-incident-engine";
 import { runFireExitIntelligenceFromParsedEvents } from "@/lib/analytics/fire-exit-intelligence-engine";
 import { normalizeIntelligenceReport } from "@/lib/analytics/normalize-intelligence";
 import {
@@ -34,18 +38,29 @@ export type BuildExecutiveReportForExportResult =
       status: 400 | 404 | 500;
     };
 
-function selectEventsForPeriod(
-  allEvents: ParsedFireExitEvent[],
+function selectEventsByImportForPeriod(
   eventsByImportId: Map<string, ParsedFireExitEvent[]>,
   bounds: NonNullable<
     ReturnType<typeof resolveTrendsPeriodBounds>["bounds"]
   >,
-): ParsedFireExitEvent[] {
+): Map<string, ParsedFireExitEvent[]> {
   if (bounds.preset === "last-import" && bounds.importId) {
-    return eventsByImportId.get(bounds.importId) ?? [];
+    const events = eventsByImportId.get(bounds.importId) ?? [];
+    return new Map(events.length > 0 ? [[bounds.importId, events]] : []);
   }
 
-  return filterEventsByTimestamp(allEvents, bounds.startMs, bounds.endMs);
+  const filtered = new Map<string, ParsedFireExitEvent[]>();
+  for (const [importId, events] of eventsByImportId) {
+    const inRange = events.filter(
+      (event) =>
+        event.timestamp >= bounds.startMs && event.timestamp <= bounds.endMs,
+    );
+    if (inRange.length > 0) {
+      filtered.set(importId, inRange);
+    }
+  }
+
+  return filtered;
 }
 
 export async function buildExecutiveReportForExport(
@@ -121,7 +136,11 @@ export async function buildExecutiveReportForExport(
     );
   }
 
-  const periodEvents = selectEventsForPeriod(allEvents, eventsByImportId, bounds);
+  const periodEventsByImport = selectEventsByImportForPeriod(
+    eventsByImportId,
+    bounds,
+  );
+  const periodEvents = [...periodEventsByImport.values()].flat();
 
   if (periodEvents.length === 0) {
     return {
@@ -136,9 +155,27 @@ export async function buildExecutiveReportForExport(
   const totalRowCount = imports.reduce((sum, record) => sum + record.row_count, 0);
   const hasDurationField = imports.some((record) => record.has_duration_field);
 
+  const importContexts = new Map<string, ImportContext>(
+    imports.map((record) => [
+      record.id,
+      {
+        importId: record.id,
+        reportingPeriodStart: record.reporting_period_start,
+        reportingPeriodEnd: record.reporting_period_end,
+        createdAt: record.created_at,
+      },
+    ]),
+  );
+
+  const canonical = buildCanonicalIncidentsByDoor({
+    eventsByImportId: periodEventsByImport,
+    importContexts,
+    config,
+  });
+
   const intelligence = normalizeIntelligenceReport(
     runFireExitIntelligenceFromParsedEvents(
-      periodEvents,
+      canonical.dedupedEvents,
       primaryImport.headers,
       [],
       {
@@ -150,6 +187,7 @@ export async function buildExecutiveReportForExport(
         analyzedRowCount: totalRowCount,
         hasDurationField,
         mapping,
+        incidentsByDoor: canonical.incidentsByDoor,
       },
     ).report,
   );

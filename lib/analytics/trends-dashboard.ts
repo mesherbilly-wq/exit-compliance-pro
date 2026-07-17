@@ -19,6 +19,10 @@ import {
   type TrendDirection,
 } from "./door-intelligence-view";
 import { runFireExitIntelligenceFromParsedEvents } from "./fire-exit-intelligence-engine";
+import {
+  buildCanonicalIncidentsByDoor,
+  type ImportContext,
+} from "./canonical-incident-engine";
 import { getDoorIncidents, normalizeIntelligenceReport } from "./normalize-intelligence";
 import {
   filterEventsByTimestamp,
@@ -134,6 +138,7 @@ export type TrendsDashboard = {
 export type BuildTrendsDashboardInput = {
   allEvents: ParsedFireExitEvent[];
   eventsByImportId: Map<string, ParsedFireExitEvent[]>;
+  importContexts?: Map<string, ImportContext>;
   metadata: TrendsImportMetadata;
   config: FireExitAnalyticsConfig;
   bounds: TrendsPeriodBounds;
@@ -152,14 +157,26 @@ export function buildTrendsDashboard(
   input: BuildTrendsDashboardInput,
 ): TrendsDashboard {
   const { bounds, config, metadata } = input;
-  const currentEvents = selectPeriodEvents(input);
-  const previousEvents = selectPreviousPeriodEvents(input);
+  const currentEventsByImport = selectPeriodEventsByImport(input);
+  const previousEventsByImport = selectPreviousPeriodEventsByImport(input);
 
-  const currentReport = buildReportFromEvents(currentEvents, metadata, config);
+  const currentReport = buildReportFromEvents(
+    currentEventsByImport,
+    input.metadata,
+    config,
+    input.importContexts,
+  );
   const previousReport =
-    previousEvents.length > 0
-      ? buildReportFromEvents(previousEvents, metadata, config)
+    [...previousEventsByImport.values()].flat().length > 0
+      ? buildReportFromEvents(
+          previousEventsByImport,
+          input.metadata,
+          config,
+          input.importContexts,
+        )
       : null;
+
+  const currentEvents = [...currentEventsByImport.values()].flat();
 
   const currentIncidents = collectIncidents(currentReport);
   const previousIncidents = previousReport
@@ -213,49 +230,86 @@ export function buildTrendsDashboard(
   };
 }
 
-function selectPeriodEvents(input: BuildTrendsDashboardInput): ParsedFireExitEvent[] {
-  const { bounds, eventsByImportId, allEvents } = input;
+function selectPeriodEventsByImport(
+  input: BuildTrendsDashboardInput,
+): Map<string, ParsedFireExitEvent[]> {
+  const { bounds, eventsByImportId } = input;
 
   if (bounds.preset === "last-import" && bounds.importId) {
-    return eventsByImportId.get(bounds.importId) ?? [];
+    const events = eventsByImportId.get(bounds.importId) ?? [];
+    return new Map(events.length > 0 ? [[bounds.importId, events]] : []);
   }
 
-  return filterEventsByTimestamp(allEvents, bounds.startMs, bounds.endMs);
+  return filterEventsByImportIdInRange(
+    eventsByImportId,
+    bounds.startMs,
+    bounds.endMs,
+  );
 }
 
-function selectPreviousPeriodEvents(
+function selectPreviousPeriodEventsByImport(
   input: BuildTrendsDashboardInput,
-): ParsedFireExitEvent[] {
-  const { bounds, eventsByImportId, allEvents } = input;
+): Map<string, ParsedFireExitEvent[]> {
+  const { bounds, eventsByImportId } = input;
 
   if (!bounds.comparisonAvailable) {
-    return [];
+    return new Map();
   }
 
   if (bounds.preset === "last-import" && bounds.previousImportId) {
-    return eventsByImportId.get(bounds.previousImportId) ?? [];
+    const events = eventsByImportId.get(bounds.previousImportId) ?? [];
+    return new Map(
+      events.length > 0 ? [[bounds.previousImportId, events]] : [],
+    );
   }
 
   if (
     bounds.comparisonStartMs === null ||
     bounds.comparisonEndMs === null
   ) {
-    return [];
+    return new Map();
   }
 
-  return filterEventsByTimestamp(
-    allEvents,
+  return filterEventsByImportIdInRange(
+    eventsByImportId,
     bounds.comparisonStartMs,
     bounds.comparisonEndMs,
   );
 }
 
+function filterEventsByImportIdInRange(
+  eventsByImportId: Map<string, ParsedFireExitEvent[]>,
+  startMs: number,
+  endMs: number,
+): Map<string, ParsedFireExitEvent[]> {
+  const filtered = new Map<string, ParsedFireExitEvent[]>();
+
+  for (const [importId, events] of eventsByImportId) {
+    const inRange = events.filter(
+      (event) => event.timestamp >= startMs && event.timestamp <= endMs,
+    );
+
+    if (inRange.length > 0) {
+      filtered.set(importId, inRange);
+    }
+  }
+
+  return filtered;
+}
+
 function buildReportFromEvents(
-  events: ParsedFireExitEvent[],
+  eventsByImportId: Map<string, ParsedFireExitEvent[]>,
   metadata: TrendsImportMetadata,
   config: FireExitAnalyticsConfig,
+  importContexts?: Map<string, ImportContext>,
 ): FireExitIntelligenceReport {
-  if (events.length === 0) {
+  const canonical = buildCanonicalIncidentsByDoor({
+    eventsByImportId,
+    importContexts,
+    config,
+  });
+
+  if (canonical.dedupedEvents.length === 0) {
     return normalizeIntelligenceReport(
       runFireExitIntelligenceFromParsedEvents([], metadata.headers, [], {
         sourceFileName: metadata.sourceFileName,
@@ -269,15 +323,16 @@ function buildReportFromEvents(
 
   return normalizeIntelligenceReport(
     runFireExitIntelligenceFromParsedEvents(
-      events,
+      canonical.dedupedEvents,
       metadata.headers,
       [],
       {
         sourceFileName: metadata.sourceFileName,
         config,
-        analyzedRowCount: events.length,
+        analyzedRowCount: canonical.dedupedEvents.length,
         hasDurationField: metadata.hasDurationField,
         mapping: metadata.mapping,
+        incidentsByDoor: canonical.incidentsByDoor,
       },
     ).report,
   );
@@ -325,7 +380,13 @@ function buildComplianceScoreSeries(
     return [];
   }
 
-  const incidents = collectIncidents(buildReportFromEvents(events, metadata, config));
+  const incidents = collectIncidents(
+    buildReportFromEvents(
+      new Map([["period", events]]),
+      metadata,
+      config,
+    ),
+  );
   const grouped = groupIncidents(incidents, bounds.grouping);
 
   return grouped.map((bucket) => {
@@ -334,7 +395,11 @@ function buildComplianceScoreSeries(
       bucket.startMs,
       bucket.endMs,
     );
-    const report = buildReportFromEvents(bucketEvents, metadata, config);
+    const report = buildReportFromEvents(
+      new Map([["period", bucketEvents]]),
+      metadata,
+      config,
+    );
 
     return {
       periodKey: bucket.periodKey,

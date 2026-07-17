@@ -70,9 +70,9 @@ function buildReportFromEvents(
     .sort((a, b) => a.localeCompare(b))
     .map((door) => {
       const doorEvents = grouped.get(door) ?? [];
-      const incidents =
-        incidentsByDoor?.get(door) ??
-        buildComplianceIncidents(doorEvents, config);
+      const incidents = incidentsByDoor
+        ? (incidentsByDoor.get(door) ?? [])
+        : buildComplianceIncidents(doorEvents, config);
       const totalFireExitEvents = doorEvents.length;
 
       return buildDoorIntelligenceProfile(door, totalFireExitEvents, incidents);

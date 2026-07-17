@@ -50,6 +50,9 @@ export type ImportIncidentRow = {
   hour_started: number;
   is_explicit_alarm: boolean;
   event_type: string;
+  classification?: string | null;
+  trace_data?: Record<string, unknown> | null;
+  analytics_engine_version?: string | null;
 };
 
 export type ImportHourlyStatisticRow = {
@@ -87,6 +90,11 @@ export type ImportParsedEventRow = {
   event_type: string;
   event_timestamp: number;
   csv_duration_seconds: number | null;
+  source_row_number?: number | null;
+  source_sequence?: number | null;
+  source_event_id?: string | null;
+  source_system?: string | null;
+  site?: string | null;
 };
 
 export function sourceToLabel(

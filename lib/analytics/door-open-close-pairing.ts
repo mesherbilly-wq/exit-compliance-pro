@@ -2,6 +2,7 @@ import {
   isDoorClosedEvent,
   isDoorOpenedEvent,
 } from "@/lib/reports/door-event-analysis";
+import { sortEventsDeterministic } from "./sort-events";
 import type { ParsedFireExitEvent } from "./types";
 
 export type DoorOpenCloseSession = {
@@ -11,6 +12,7 @@ export type DoorOpenCloseSession = {
   durationSeconds: number;
   openEventId: string;
   closeEventId: string;
+  crossImport: boolean;
 };
 
 export type DoorOpenClosePairingLogEntry = {
@@ -24,7 +26,15 @@ export type DoorOpenClosePairingLogEntry = {
     | "paired"
     | "orphan-close"
     | "duplicate-open-replaced"
-    | "unclosed-open";
+    | "unclosed-open"
+    | "cross-import-paired"
+    | "expired-unmatched-open";
+};
+
+export type DoorOpenClosePairingResult = {
+  sessions: DoorOpenCloseSession[];
+  pendingOpen: ParsedFireExitEvent | null;
+  orphanCloses: ParsedFireExitEvent[];
 };
 
 function buildEventId(event: ParsedFireExitEvent, index: number): string {
@@ -34,20 +44,21 @@ function buildEventId(event: ParsedFireExitEvent, index: number): string {
 export function pairDoorOpenCloseSessions(
   events: ParsedFireExitEvent[],
   options?: {
+    initialPendingOpen?: ParsedFireExitEvent | null;
     debug?: boolean;
     debugLogs?: DoorOpenClosePairingLogEntry[];
   },
-): DoorOpenCloseSession[] {
-  const sorted = [...events].sort((a, b) => {
-    if (a.timestamp !== b.timestamp) {
-      return a.timestamp - b.timestamp;
-    }
-
-    return a.eventTime.localeCompare(b.eventTime);
-  });
-
+): DoorOpenClosePairingResult {
+  const sorted = sortEventsDeterministic(events);
   const sessions: DoorOpenCloseSession[] = [];
-  let pendingOpen: { event: ParsedFireExitEvent; eventId: string } | null = null;
+  const orphanCloses: ParsedFireExitEvent[] = [];
+  let pendingOpen: { event: ParsedFireExitEvent; eventId: string } | null =
+    options?.initialPendingOpen
+      ? {
+          event: options.initialPendingOpen,
+          eventId: buildEventId(options.initialPendingOpen, -1),
+        }
+      : null;
 
   for (let index = 0; index < sorted.length; index += 1) {
     const event = sorted[index]!;
@@ -75,6 +86,7 @@ export function pairDoorOpenCloseSessions(
     }
 
     if (!pendingOpen || pendingOpen.event.door !== event.door) {
+      orphanCloses.push(event);
       options?.debugLogs?.push({
         door: event.door,
         eventId,
@@ -92,6 +104,11 @@ export function pairDoorOpenCloseSessions(
       (event.timestamp - pendingOpen.event.timestamp) / 1000,
     );
 
+    const crossImport =
+      pendingOpen.event.sourceImportId != null &&
+      event.sourceImportId != null &&
+      pendingOpen.event.sourceImportId !== event.sourceImportId;
+
     sessions.push({
       door: event.door,
       openEvent: pendingOpen.event,
@@ -99,6 +116,7 @@ export function pairDoorOpenCloseSessions(
       durationSeconds,
       openEventId: pendingOpen.eventId,
       closeEventId: eventId,
+      crossImport,
     });
 
     if (options?.debug || options?.debugLogs) {
@@ -109,7 +127,7 @@ export function pairDoorOpenCloseSessions(
         closeTime: event.eventTime,
         durationSeconds,
         matchedOpenEventId: pendingOpen.eventId,
-        action: "paired",
+        action: crossImport ? "cross-import-paired" : "paired",
       });
     }
 
@@ -128,7 +146,11 @@ export function pairDoorOpenCloseSessions(
     });
   }
 
-  return sessions;
+  return {
+    sessions,
+    pendingOpen: pendingOpen?.event ?? null,
+    orphanCloses,
+  };
 }
 
 export function logDoorOpenClosePairings(
@@ -139,7 +161,7 @@ export function logDoorOpenClosePairings(
   pairDoorOpenCloseSessions(events, { debugLogs });
 
   for (const entry of debugLogs) {
-    if (entry.action === "paired") {
+    if (entry.action === "paired" || entry.action === "cross-import-paired") {
       console.info(
         `[door-pairing] Door: ${door} | Event ID: ${entry.eventId} | Open: ${entry.openTime} | Close: ${entry.closeTime} | Duration: ${entry.durationSeconds}s | Matched Open Event ID: ${entry.matchedOpenEventId}`,
       );

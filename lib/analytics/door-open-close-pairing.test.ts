@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildIncidentsByDoorFromImportGroups } from "./build-incidents-from-imports";
 import { buildComplianceIncidents } from "./compliance-incidents";
+import { DERIVED_THRESHOLD_EXCEEDED_LABEL } from "./incident-classification";
 import { dedupeParsedEvents } from "./dedupe-parsed-events";
 import {
   pairDoorOpenCloseSessions,
@@ -28,15 +29,19 @@ function event(
   };
 }
 
+function sessions(events: ParsedFireExitEvent[]) {
+  return pairDoorOpenCloseSessions(events).sessions;
+}
+
 describe("pairDoorOpenCloseSessions", () => {
   it("pairs a normal open then close", () => {
-    const sessions = pairDoorOpenCloseSessions([
+    const paired = sessions([
       event(DOOR_A, "Door opened", 0, "t0"),
       event(DOOR_A, "Door closed", 9000, "t9"),
     ]);
 
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]?.durationSeconds).toBe(9);
+    expect(paired).toHaveLength(1);
+    expect(paired[0]?.durationSeconds).toBe(9);
   });
 
   it("requires per-door event lists for accurate pairing", () => {
@@ -47,23 +52,23 @@ describe("pairDoorOpenCloseSessions", () => {
       event(DOOR_B, "Door closed", 9000, "b-close"),
     ]);
 
-    expect(pairDoorOpenCloseSessions(grouped.get(DOOR_A) ?? [])[0]?.durationSeconds).toBe(6);
-    expect(pairDoorOpenCloseSessions(grouped.get(DOOR_B) ?? [])[0]?.durationSeconds).toBe(8);
+    expect(sessions(grouped.get(DOOR_A) ?? [])[0]?.durationSeconds).toBe(6);
+    expect(sessions(grouped.get(DOOR_B) ?? [])[0]?.durationSeconds).toBe(8);
   });
 
   it("replaces duplicate opens instead of pairing the first open to a later close", () => {
     const logs: DoorOpenClosePairingLogEntry[] = [];
-    const sessions = pairDoorOpenCloseSessions(
+    const paired = pairDoorOpenCloseSessions(
       [
         event(DOOR_A, "Door opened", 0, "first-open"),
         event(DOOR_A, "Door opened", 5000, "second-open"),
         event(DOOR_A, "Door closed", 9000, "close"),
       ],
       { debugLogs: logs },
-    );
+    ).sessions;
 
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]?.durationSeconds).toBe(4);
+    expect(paired).toHaveLength(1);
+    expect(paired[0]?.durationSeconds).toBe(4);
     expect(logs.some((entry) => entry.action === "duplicate-open-replaced")).toBe(
       true,
     );
@@ -71,33 +76,35 @@ describe("pairDoorOpenCloseSessions", () => {
 
   it("ignores orphan closes", () => {
     const logs: DoorOpenClosePairingLogEntry[] = [];
-    const sessions = pairDoorOpenCloseSessions(
+    const result = pairDoorOpenCloseSessions(
       [event(DOOR_A, "Door closed", 1000, "orphan-close")],
       { debugLogs: logs },
     );
 
-    expect(sessions).toHaveLength(0);
+    expect(result.sessions).toHaveLength(0);
+    expect(result.orphanCloses).toHaveLength(1);
     expect(logs[0]?.action).toBe("orphan-close");
   });
 
   it("records unclosed opens without pairing to a later close", () => {
     const logs: DoorOpenClosePairingLogEntry[] = [];
-    const sessions = pairDoorOpenCloseSessions(
+    const result = pairDoorOpenCloseSessions(
       [event(DOOR_A, "Door opened", 0, "open")],
       { debugLogs: logs },
     );
 
-    expect(sessions).toHaveLength(0);
+    expect(result.sessions).toHaveLength(0);
+    expect(result.pendingOpen).not.toBeNull();
     expect(logs[0]?.action).toBe("unclosed-open");
   });
 
   it("sorts out-of-order events before pairing", () => {
-    const sessions = pairDoorOpenCloseSessions([
-      event(DOOR_A, "Door closed", 9000, "close"),
-      event(DOOR_A, "Door opened", 0, "open"),
-    ]);
-
-    expect(sessions[0]?.durationSeconds).toBe(9);
+    expect(
+      sessions([
+        event(DOOR_A, "Door closed", 9000, "close"),
+        event(DOOR_A, "Door opened", 0, "open"),
+      ])[0]?.durationSeconds,
+    ).toBe(9);
   });
 });
 
@@ -118,8 +125,7 @@ describe("Ground - Adj David Clulow latest import events", () => {
   ];
 
   it("reports a maximum open duration of 9 seconds", () => {
-    const sessions = pairDoorOpenCloseSessions(clulowEvents);
-    const maxDuration = sessions.reduce(
+    const maxDuration = sessions(clulowEvents).reduce(
       (max, session) => Math.max(max, session.durationSeconds),
       0,
     );
@@ -142,14 +148,8 @@ describe("buildIncidentsByDoorFromImportGroups", () => {
     const importB = "import-b";
 
     const eventsByImportId = new Map<string, ParsedFireExitEvent[]>([
-      [
-        importA,
-        [event(DOOR_A, "Door opened", 0, "open-import-a")],
-      ],
-      [
-        importB,
-        [event(DOOR_A, "Door closed", 120_000, "close-import-b")],
-      ],
+      [importA, [event(DOOR_A, "Door opened", 0, "open-import-a")]],
+      [importB, [event(DOOR_A, "Door closed", 120_000, "close-import-b")]],
     ]);
 
     const incidentsByDoor = buildIncidentsByDoorFromImportGroups(eventsByImportId, {
@@ -194,6 +194,9 @@ describe("buildIncidentsByDoorFromImportGroups", () => {
     });
 
     expect(incidentsByDoor.get(DOOR_A)).toHaveLength(1);
+    expect(incidentsByDoor.get(DOOR_A)?.[0]?.eventType).not.toBe(
+      DERIVED_THRESHOLD_EXCEEDED_LABEL,
+    );
   });
 });
 
@@ -207,10 +210,7 @@ describe("groupEventsByDoor isolation", () => {
     ];
 
     const grouped = groupEventsByDoor(events);
-    const sessionsA = pairDoorOpenCloseSessions(grouped.get(DOOR_A) ?? []);
-    const sessionsB = pairDoorOpenCloseSessions(grouped.get(DOOR_B) ?? []);
-
-    expect(sessionsA[0]?.durationSeconds).toBe(6);
-    expect(sessionsB[0]?.durationSeconds).toBe(8);
+    expect(sessions(grouped.get(DOOR_A) ?? [])[0]?.durationSeconds).toBe(6);
+    expect(sessions(grouped.get(DOOR_B) ?? [])[0]?.durationSeconds).toBe(8);
   });
 });

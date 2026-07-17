@@ -36,6 +36,7 @@ describe("buildComplianceIncidents", () => {
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.durationSeconds).toBe(1091);
     expect(incidents[0]?.isExplicitAlarm).toBe(false);
+    expect(incidents[0]?.classification).toBe("derived_threshold_exceeded");
   });
 
   it("does not create incidents at or below the threshold", () => {
@@ -78,6 +79,7 @@ describe("buildComplianceIncidents", () => {
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.durationSeconds).toBe(600);
     expect(incidents[0]?.isExplicitAlarm).toBe(true);
+    expect(incidents[0]?.classification).toBe("native_held_open_alarm");
   });
 
   it("creates incidents from orphan held-open alarms with csv duration", () => {

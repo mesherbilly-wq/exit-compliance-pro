@@ -3,6 +3,10 @@ import {
   getIncidentRiskRating,
 } from "./compliance-incidents";
 import {
+  normalizeIncidentClassification,
+  normalizeIncidentEventType,
+} from "./incident-classification";
+import {
   attachComplianceProfilesToReport,
   buildDoorComplianceProfile,
 } from "./door-compliance-profile";
@@ -49,7 +53,16 @@ function normalizeLegacySession(
     dayStarted: session.dayStarted ?? DAY_LABELS[startDate.getDay()] ?? "N/A",
     hourStarted: session.hourStarted ?? startDate.getHours(),
     isExplicitAlarm: session.isExplicitAlarm ?? false,
-    eventType: session.eventType ?? "Held open",
+    classification: normalizeIncidentClassification({
+      classification: session.classification,
+      isExplicitAlarm: session.isExplicitAlarm,
+      eventType: session.eventType,
+    }),
+    eventType: normalizeIncidentEventType({
+      classification: session.classification,
+      isExplicitAlarm: session.isExplicitAlarm,
+      eventType: session.eventType,
+    }),
   };
 }
 

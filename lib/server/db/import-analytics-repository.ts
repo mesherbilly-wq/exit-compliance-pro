@@ -1,4 +1,9 @@
 import { getSupabaseAdmin } from "@/lib/server/supabase/admin";
+import { ANALYTICS_ENGINE_VERSION } from "@/lib/analytics/analytics-engine-version";
+import {
+  normalizeIncidentClassification,
+  normalizeIncidentEventType,
+} from "@/lib/analytics/incident-classification";
 import type {
   ImportDailyStatisticRow,
   ImportDoorComplianceRow,
@@ -55,6 +60,9 @@ function incidentToRow(
     hour_started: incident.hourStarted,
     is_explicit_alarm: incident.isExplicitAlarm,
     event_type: incident.eventType,
+    classification: incident.classification,
+    trace_data: incident.trace ? (incident.trace as unknown as Record<string, unknown>) : null,
+    analytics_engine_version: ANALYTICS_ENGINE_VERSION,
   };
 }
 
@@ -69,6 +77,27 @@ function parsedEventToRow(
     event_type: event.eventType,
     event_timestamp: event.timestamp,
     csv_duration_seconds: event.csvDurationSeconds,
+    source_row_number: event.sourceRowNumber ?? null,
+    source_sequence: event.sourceSequence ?? null,
+    source_event_id: event.sourceEventId ?? null,
+    source_system: event.sourceSystem ?? "genetec",
+    site: event.site ?? null,
+  };
+}
+
+function rowToParsedEvent(row: ImportParsedEventRow): ParsedFireExitEvent {
+  return {
+    door: row.door,
+    eventTime: row.event_time,
+    eventType: row.event_type,
+    timestamp: row.event_timestamp,
+    csvDurationSeconds: row.csv_duration_seconds,
+    sourceImportId: row.import_id,
+    sourceRowNumber: row.source_row_number ?? undefined,
+    sourceSequence: row.source_sequence ?? undefined,
+    sourceEventId: row.source_event_id ?? undefined,
+    sourceSystem: row.source_system ?? undefined,
+    site: row.site ?? undefined,
   };
 }
 
@@ -96,6 +125,8 @@ export type PersistImportAnalyticsInput = {
   importId: string;
   intelligence: FireExitIntelligenceReport;
   parsedEvents: ParsedFireExitEvent[];
+  analyticsEngineVersion?: string;
+  analyticsThresholdSeconds?: number;
 };
 
 export type PersistImportAnalyticsResult = {
@@ -104,6 +135,8 @@ export type PersistImportAnalyticsResult = {
   complianceScoreSnapshot: number;
   reportingPeriodStart: string | null;
   reportingPeriodEnd: string | null;
+  analyticsEngineVersion: string;
+  analyticsThresholdSeconds: number;
 };
 
 export async function persistImportAnalytics(
@@ -184,6 +217,11 @@ export async function persistImportAnalytics(
     complianceScoreSnapshot: intelligence.summary.overallComplianceScore,
     reportingPeriodStart,
     reportingPeriodEnd,
+    analyticsEngineVersion:
+      input.analyticsEngineVersion ?? ANALYTICS_ENGINE_VERSION,
+    analyticsThresholdSeconds:
+      input.analyticsThresholdSeconds ??
+      intelligence.config.heldOpenThresholdSeconds,
   };
 }
 
@@ -208,9 +246,12 @@ export async function loadParsedEventsForImports(
   while (true) {
     const { data, error } = await supabase
       .from("import_parsed_events")
-      .select("door, event_time, event_type, event_timestamp, csv_duration_seconds")
+      .select(
+        "import_id, door, event_time, event_type, event_timestamp, csv_duration_seconds, source_row_number, source_sequence, source_event_id, source_system, site",
+      )
       .in("import_id", importIds)
       .order("event_timestamp", { ascending: true })
+      .order("source_sequence", { ascending: true })
       .range(from, from + pageSize - 1);
 
     if (error) {
@@ -227,13 +268,7 @@ export async function loadParsedEventsForImports(
     from += pageSize;
   }
 
-  return allRows.map((row) => ({
-    door: row.door,
-    eventTime: row.event_time,
-    eventType: row.event_type,
-    timestamp: row.event_timestamp,
-    csvDurationSeconds: row.csv_duration_seconds,
-  }));
+  return allRows.map((row) => rowToParsedEvent(row as ImportParsedEventRow));
 }
 
 export async function loadParsedEventsGroupedByImports(
@@ -254,9 +289,12 @@ export async function loadParsedEventsGroupedByImports(
   while (true) {
     const { data, error } = await supabase
       .from("import_parsed_events")
-      .select("import_id, door, event_time, event_type, event_timestamp, csv_duration_seconds")
+      .select(
+        "import_id, door, event_time, event_type, event_timestamp, csv_duration_seconds, source_row_number, source_sequence, source_event_id, source_system, site",
+      )
       .in("import_id", importIds)
       .order("event_timestamp", { ascending: true })
+      .order("source_sequence", { ascending: true })
       .range(from, from + pageSize - 1);
 
     if (error) {
@@ -277,13 +315,7 @@ export async function loadParsedEventsGroupedByImports(
   const allEvents: ParsedFireExitEvent[] = [];
 
   for (const row of allRows) {
-    const event: ParsedFireExitEvent = {
-      door: row.door,
-      eventTime: row.event_time,
-      eventType: row.event_type,
-      timestamp: row.event_timestamp,
-      csvDurationSeconds: row.csv_duration_seconds,
-    };
+    const event = rowToParsedEvent(row as ImportParsedEventRow);
 
     allEvents.push(event);
     const bucket = eventsByImportId.get(row.import_id) ?? [];
@@ -322,7 +354,17 @@ export async function loadIncidentsForImport(
     dayStarted: row.day_started,
     hourStarted: row.hour_started,
     isExplicitAlarm: row.is_explicit_alarm,
-    eventType: row.event_type,
+    eventType: normalizeIncidentEventType({
+      classification: row.classification as ComplianceIncident["classification"] | undefined,
+      isExplicitAlarm: row.is_explicit_alarm,
+      eventType: row.event_type,
+    }),
+    classification: normalizeIncidentClassification({
+      classification: row.classification as ComplianceIncident["classification"] | undefined,
+      isExplicitAlarm: row.is_explicit_alarm,
+      eventType: row.event_type,
+    }),
+    trace: row.trace_data as ComplianceIncident["trace"],
   }));
 }
 

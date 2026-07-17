@@ -361,6 +361,8 @@ export async function updateServerImport(
     reportingPeriodEnd?: string | null;
     hasAnalytics?: boolean;
     hasDurationField?: boolean;
+    analyticsEngineVersion?: string | null;
+    analyticsThresholdSeconds?: number | null;
     originalFilePath?: string | null;
     failedCsvPath?: string | null;
     failedCsvRetentionUntil?: string | null;
@@ -387,6 +389,8 @@ export async function updateServerImport(
       reporting_period_end: input.reportingPeriodEnd,
       has_analytics: input.hasAnalytics,
       has_duration_field: input.hasDurationField,
+      analytics_engine_version: input.analyticsEngineVersion,
+      analytics_threshold_seconds: input.analyticsThresholdSeconds,
       original_file_path: input.originalFilePath,
       failed_csv_path: input.failedCsvPath,
       failed_csv_retention_until: input.failedCsvRetentionUntil,
