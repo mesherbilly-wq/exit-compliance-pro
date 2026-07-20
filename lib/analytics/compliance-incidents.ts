@@ -43,6 +43,8 @@ export type BuildComplianceIncidentsOptions = {
   incidentPolicy?: IncidentSourcePolicy;
   initialPendingOpen?: ParsedFireExitEvent | null;
   sessions?: DoorOpenCloseSession[];
+  /** When true, incident start time is the door-open event, not threshold-crossed time. */
+  anchorStartToOpenEvent?: boolean;
 };
 
 export function getIncidentDurationBucket(
@@ -124,8 +126,9 @@ export function buildComplianceIncidentRecord(
     0,
     durationSeconds - thresholdSeconds,
   );
-  const startTimestamp =
-    timeBeyondThresholdSeconds > 0
+  const startTimestamp = options?.anchorStartToOpenEvent
+    ? openStart.timestamp
+    : timeBeyondThresholdSeconds > 0
       ? thresholdCrossedTimestamp
       : openStart.timestamp;
   const startDate = new Date(startTimestamp);
@@ -135,7 +138,9 @@ export function buildComplianceIncidentRecord(
     door,
     startTimestamp,
     endTimestamp,
-    startTimeLabel: formatTimestampLabel(startTimestamp, openStart.eventTime),
+    startTimeLabel: options?.anchorStartToOpenEvent
+      ? formatTimestampLabel(openStart.timestamp, openStart.eventTime)
+      : formatTimestampLabel(startTimestamp, openStart.eventTime),
     endTimeLabel,
     durationSeconds,
     thresholdSeconds,

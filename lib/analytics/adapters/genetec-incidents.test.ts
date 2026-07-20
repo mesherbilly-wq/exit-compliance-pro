@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildGenetecComplianceIncidents } from "./genetec-incidents";
+import {
+  buildGenetecComplianceIncidents,
+  findFirstCloseAfterAlarm,
+  findLastOpenBeforeAlarm,
+} from "./genetec-incidents";
 import { buildCanonicalIncidentsByDoor } from "../canonical-incident-engine";
 import { buildComplianceIncidents } from "../compliance-incidents";
 import { dedupeParsedEvents } from "../dedupe-parsed-events";
@@ -50,6 +54,8 @@ describe("Genetec native-alarm-only incident policy", () => {
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.classification).toBe("native_held_open_alarm");
     expect(incidents[0]?.eventType).toBe("Door held open");
+    expect(incidents[0]?.startTimestamp).toBe(0);
+    expect(incidents[0]?.endTimestamp).toBe(600_000);
     expect(incidents[0]?.durationSeconds).toBe(600);
   });
 
@@ -65,6 +71,8 @@ describe("Genetec native-alarm-only incident policy", () => {
 
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.eventType).toBe("Door open too long");
+    expect(incidents[0]?.startTimestamp).toBe(0);
+    expect(incidents[0]?.endTimestamp).toBe(700_000);
     expect(incidents[0]?.durationSeconds).toBe(700);
   });
 
@@ -78,11 +86,12 @@ describe("Genetec native-alarm-only incident policy", () => {
     );
 
     expect(incidents).toHaveLength(1);
+    expect(incidents[0]?.startTimestamp).toBe(0);
     expect(incidents[0]?.endTimestamp).toBe(400_000);
     expect(incidents[0]?.classification).toBe("native_held_open_alarm");
   });
 
-  it("matches held-open alarms to the correct session on the same door", () => {
+  it("anchors held-open alarms to the last open before and first close after the alarm", () => {
     const incidents = buildGenetecComplianceIncidents(
       [
         event("Door opened", 0, { sourceSequence: 0 }),
@@ -95,7 +104,8 @@ describe("Genetec native-alarm-only incident policy", () => {
     );
 
     expect(incidents).toHaveLength(1);
-    expect(incidents[0]?.startTimestamp).toBeGreaterThanOrEqual(330_000);
+    expect(incidents[0]?.startTimestamp).toBe(30_000);
+    expect(incidents[0]?.endTimestamp).toBe(600_000);
     expect(incidents[0]?.durationSeconds).toBe(570);
   });
 
@@ -158,6 +168,26 @@ describe("Genetec native-alarm-only incident policy", () => {
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.classification).toBe("derived_open_duration");
     expect(incidents[0]?.eventType).toBe("Open beyond configured threshold");
+  });
+
+  it("uses the first door close after the alarm even when a later close exists", () => {
+    const alarm = event("Door open too long", 400_000, { sourceSequence: 2 });
+    const sorted = [
+      event("Door opened", 0, { sourceSequence: 0 }),
+      alarm,
+      event("Door closed", 500_000, { sourceSequence: 3 }),
+      event("Door closed", 700_000, { sourceSequence: 4 }),
+    ];
+
+    expect(findLastOpenBeforeAlarm(alarm, sorted)?.timestamp).toBe(0);
+    expect(findFirstCloseAfterAlarm(alarm, sorted)?.timestamp).toBe(500_000);
+
+    const incidents = buildGenetecComplianceIncidents(sorted, {
+      heldOpenThresholdSeconds: THRESHOLD,
+    });
+
+    expect(incidents[0]?.startTimestamp).toBe(0);
+    expect(incidents[0]?.endTimestamp).toBe(500_000);
   });
 
   it("ignores Clulow Jul 9 over-threshold session without native alarm", () => {
