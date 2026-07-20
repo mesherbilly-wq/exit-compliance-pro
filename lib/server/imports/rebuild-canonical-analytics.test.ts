@@ -23,6 +23,7 @@ function event(
     csvDurationSeconds: null,
     sourceImportId: importId,
     sourceSequence: sequence,
+    sourceSystem: "manual",
   };
 }
 

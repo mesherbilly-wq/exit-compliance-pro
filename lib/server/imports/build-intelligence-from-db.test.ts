@@ -86,6 +86,7 @@ describe("buildComplianceIncidents threshold sensitivity", () => {
       eventTime: "7/10/2026 7:00:00 AM",
       timestamp: 1_000_000,
       csvDurationSeconds: null,
+      sourceSystem: "manual",
     },
     {
       door: "Test Door",
@@ -93,6 +94,7 @@ describe("buildComplianceIncidents threshold sensitivity", () => {
       eventTime: "7/10/2026 7:00:22 AM",
       timestamp: 1_022_000,
       csvDurationSeconds: null,
+      sourceSystem: "manual",
     },
   ];
 

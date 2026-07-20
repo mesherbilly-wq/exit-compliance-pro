@@ -1,5 +1,6 @@
 export type IncidentClassification =
   | "native_held_open_alarm"
+  | "derived_open_duration"
   | "derived_threshold_exceeded";
 
 export const DERIVED_THRESHOLD_EXCEEDED_LABEL =
@@ -18,7 +19,7 @@ export function classificationFromExplicitAlarm(
 ): IncidentClassification {
   return isExplicitAlarm
     ? "native_held_open_alarm"
-    : "derived_threshold_exceeded";
+    : "derived_open_duration";
 }
 
 export function getIncidentDisplayLabel(
@@ -51,12 +52,18 @@ export function normalizeIncidentClassification(
     incident.eventType === LEGACY_DERIVED_THRESHOLD_LABEL ||
     incident.eventType === DERIVED_THRESHOLD_EXCEEDED_LABEL
   ) {
+    return incident.classification === "derived_threshold_exceeded"
+      ? "derived_threshold_exceeded"
+      : "derived_open_duration";
+  }
+
+  if (incident.classification === "derived_threshold_exceeded") {
     return "derived_threshold_exceeded";
   }
 
   return incident.isExplicitAlarm
     ? "native_held_open_alarm"
-    : "derived_threshold_exceeded";
+    : "derived_open_duration";
 }
 
 export function normalizeIncidentEventType(incident: {

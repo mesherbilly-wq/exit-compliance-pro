@@ -1,8 +1,5 @@
 import { ANALYTICS_ENGINE_VERSION } from "./analytics-engine-version";
-import {
-  buildDerivedIncidentsFromSessions,
-  buildNativeAlarmIncidents,
-} from "./compliance-incidents";
+import { buildComplianceIncidents } from "./compliance-incidents";
 import {
   attachImportMetadata,
   dedupeIncidents,
@@ -10,6 +7,7 @@ import {
 } from "./dedupe-parsed-events";
 import { pairDoorOpenCloseSessions } from "./door-open-close-pairing";
 import { groupEventsByDoor } from "./parse-events";
+import { resolveIncidentPolicyForEvents } from "./incident-source-policy";
 import { sortEventsDeterministic } from "./sort-events";
 import type { IncidentEngineDiagnostics } from "./incident-trace";
 import type {
@@ -121,14 +119,6 @@ export function areImportsContiguousForCarryForward(
   );
 }
 
-function mergeExplicitAndDerivedIncidents(
-  explicit: ComplianceIncident[],
-  derived: ComplianceIncident[],
-): ComplianceIncident[] {
-  return dedupeIncidents([...explicit, ...derived]).sort(
-    (a, b) => a.startTimestamp - b.startTimestamp,
-  );
-}
 
 function buildIncidentsForImportDoor(
   doorEvents: ParsedFireExitEvent[],
@@ -143,7 +133,7 @@ function buildIncidentsForImportDoor(
   expiredUnmatchedOpens: ParsedFireExitEvent[];
 } {
   const sorted = sortEventsDeterministic(doorEvents);
-  const explicit = buildNativeAlarmIncidents(sorted, config, { includeTrace });
+  const policy = resolveIncidentPolicyForEvents(sorted);
   const pairing = pairDoorOpenCloseSessions(sorted, {
     initialPendingOpen,
   });
@@ -153,14 +143,16 @@ function buildIncidentsForImportDoor(
   const rejectedSessions = pairing.sessions.filter(
     (session) => session.durationSeconds * 1000 > MAX_CARRY_FORWARD_MS,
   );
-  const derived = buildDerivedIncidentsFromSessions(
-    validSessions,
-    config,
-    { includeTrace },
-  );
+
+  const incidents = buildComplianceIncidents(sorted, config, {
+    includeTrace,
+    incidentPolicy: policy,
+    initialPendingOpen,
+    sessions: validSessions,
+  });
 
   return {
-    incidents: mergeExplicitAndDerivedIncidents(explicit, derived),
+    incidents,
     pendingOpen: pairing.pendingOpen,
     orphanCloses: [
       ...pairing.orphanCloses,

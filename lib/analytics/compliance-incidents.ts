@@ -3,10 +3,15 @@ import {
   isDoorOpenedEvent,
 } from "@/lib/reports/door-event-analysis";
 import { isHeldOpenEvent } from "@/lib/reports/held-open-detection";
+import { buildGenetecComplianceIncidents } from "./adapters/genetec-incidents";
 import {
   classificationFromExplicitAlarm,
   getIncidentDisplayLabel,
 } from "./incident-classification";
+import {
+  resolveIncidentPolicyForEvents,
+  type IncidentSourcePolicy,
+} from "./incident-source-policy";
 import { buildIncidentTrace } from "./incident-trace";
 import { dedupeIncidents } from "./dedupe-parsed-events";
 import {
@@ -35,6 +40,9 @@ type ActiveIncidentState = {
 
 export type BuildComplianceIncidentsOptions = {
   includeTrace?: boolean;
+  incidentPolicy?: IncidentSourcePolicy;
+  initialPendingOpen?: ParsedFireExitEvent | null;
+  sessions?: DoorOpenCloseSession[];
 };
 
 export function getIncidentDurationBucket(
@@ -94,7 +102,7 @@ function formatTimestampLabel(timestamp: number, fallback: string): string {
   }).format(new Date(timestamp));
 }
 
-function buildIncident(
+export function buildComplianceIncidentRecord(
   door: string,
   openStart: ParsedFireExitEvent,
   endEvent: ParsedFireExitEvent,
@@ -162,7 +170,7 @@ function finalizeActiveIncident(
   thresholdSeconds: number,
   options?: BuildComplianceIncidentsOptions,
 ): ComplianceIncident {
-  return buildIncident(
+  return buildComplianceIncidentRecord(
     active.door,
     active.openStart,
     endEvent,
@@ -265,7 +273,7 @@ export function buildNativeAlarmIncidents(
       };
 
       incidents.push(
-        buildIncident(
+        buildComplianceIncidentRecord(
           event.door,
           syntheticOpen,
           event,
@@ -296,10 +304,19 @@ export function buildComplianceIncidents(
   }
 
   const sorted = sortEventsDeterministic(events);
+  const policy =
+    options?.incidentPolicy ?? resolveIncidentPolicyForEvents(sorted);
+
+  if (policy === "genetec_native_alarm_only") {
+    return buildGenetecComplianceIncidents(sorted, config, options);
+  }
+
   const native = buildNativeAlarmIncidents(sorted, config, options);
-  const pairing = pairDoorOpenCloseSessions(sorted);
+  const pairing = pairDoorOpenCloseSessions(sorted, {
+    initialPendingOpen: options?.initialPendingOpen ?? null,
+  });
   const derived = buildDerivedIncidentsFromSessions(
-    pairing.sessions,
+    options?.sessions ?? pairing.sessions,
     config,
     options,
   ).filter(
@@ -330,7 +347,7 @@ export function buildDerivedIncidentsFromSessions(
     }
 
     incidents.push(
-      buildIncident(
+      buildComplianceIncidentRecord(
         session.door,
         session.openEvent,
         session.closeEvent,

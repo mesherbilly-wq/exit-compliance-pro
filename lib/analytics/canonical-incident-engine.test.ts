@@ -34,7 +34,21 @@ function event(
 }
 
 describe("canonical incident engine", () => {
-  it("creates a derived incident for open/close over threshold", () => {
+  it("creates a derived incident for open/close over threshold on non-Genetec sources", () => {
+    const incidents = buildComplianceIncidents(
+      [
+        event(DOOR, "Door opened", 0, "open", { sourceSystem: "manual" }),
+        event(DOOR, "Door closed", 120_000, "close", { sourceSystem: "manual" }),
+      ],
+      { heldOpenThresholdSeconds: 30 },
+    );
+
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]?.classification).toBe("derived_open_duration");
+    expect(incidents[0]?.eventType).toBe(DERIVED_THRESHOLD_EXCEEDED_LABEL);
+  });
+
+  it("does not create derived incidents for Genetec open/close over threshold", () => {
     const incidents = buildComplianceIncidents(
       [
         event(DOOR, "Door opened", 0, "open"),
@@ -43,9 +57,7 @@ describe("canonical incident engine", () => {
       { heldOpenThresholdSeconds: 30 },
     );
 
-    expect(incidents).toHaveLength(1);
-    expect(incidents[0]?.classification).toBe("derived_threshold_exceeded");
-    expect(incidents[0]?.eventType).toBe(DERIVED_THRESHOLD_EXCEEDED_LABEL);
+    expect(incidents).toHaveLength(0);
   });
 
   it("does not create incidents below threshold", () => {
@@ -153,7 +165,7 @@ describe("canonical incident engine", () => {
     expect(diagnostics.expiredUnmatchedOpens).toHaveLength(1);
   });
 
-  it("allows legitimate cross-import pairing within carry-forward window", () => {
+  it("does not create cross-import derived incidents for Genetec without native alarms", () => {
     const importA = "import-a";
     const importB = "import-b";
     const openTs = 1_000_000;
@@ -165,6 +177,46 @@ describe("canonical incident engine", () => {
         [
           importB,
           [event(DOOR, "Door closed", closeTs, "close-b", { sourceSequence: 0 })],
+        ],
+      ]),
+      importContexts: new Map([
+        [
+          importA,
+          {
+            importId: importA,
+            reportingPeriodStart: new Date(openTs - 1000).toISOString(),
+            reportingPeriodEnd: new Date(openTs + 1000).toISOString(),
+            createdAt: new Date(openTs - 1000).toISOString(),
+          },
+        ],
+        [
+          importB,
+          {
+            importId: importB,
+            reportingPeriodStart: new Date(closeTs - 1000).toISOString(),
+            reportingPeriodEnd: new Date(closeTs + 1000).toISOString(),
+            createdAt: new Date(closeTs - 1000).toISOString(),
+          },
+        ],
+      ]),
+      config: { heldOpenThresholdSeconds: 30 },
+    }).incidentsByDoor.get(DOOR) ?? [];
+
+    expect(incidents).toHaveLength(0);
+  });
+
+  it("allows legitimate cross-import pairing within carry-forward window for non-Genetec sources", () => {
+    const importA = "import-a";
+    const importB = "import-b";
+    const openTs = 1_000_000;
+    const closeTs = openTs + 600_000;
+
+    const incidents = buildCanonicalIncidentsByDoor({
+      eventsByImportId: new Map([
+        [importA, [event(DOOR, "Door opened", openTs, "open-a", { sourceSequence: 0, sourceSystem: "manual" })]],
+        [
+          importB,
+          [event(DOOR, "Door closed", closeTs, "close-b", { sourceSequence: 0, sourceSystem: "manual" })],
         ],
       ]),
       importContexts: new Map([
@@ -299,7 +351,7 @@ describe("canonical incident engine", () => {
     expect(incidents[0]?.eventType).toBe("Door open too long");
   });
 
-  it("matches exact Ground - Adj David Clulow Jul 9 morning sequence", () => {
+  it("ignores Clulow Jul 9 over-threshold session without native alarm", () => {
     const tsOpen1 = 1783584575000;
     const tsOpen2 = 1783584579000;
     const tsClose = 1783585100000;
@@ -323,20 +375,15 @@ describe("canonical incident engine", () => {
       { includeTrace: true },
     );
 
-    const match = incidents.find(
-      (incident) => incident.endTimeLabel === "7/9/2026 8:18:20 AM",
-    );
-
-    expect(match?.durationSeconds).toBe(521);
-    expect(match?.classification).toBe("derived_threshold_exceeded");
-    expect(match?.trace?.qualificationReason).toContain("threshold");
+    expect(incidents).toHaveLength(0);
   });
 
   it("keeps stored and live incident counts consistent for a single import", () => {
     const importId = "import-single";
     const events = [
       event(DOOR, "Door opened", 0, "open"),
-      event(DOOR, "Door closed", 120_000, "close"),
+      event(DOOR, "Door held open", 360_000, "held"),
+      event(DOOR, "Door closed", 600_000, "close"),
     ];
 
     const live = buildCanonicalIncidentsByDoor({

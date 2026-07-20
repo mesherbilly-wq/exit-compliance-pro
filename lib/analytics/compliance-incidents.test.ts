@@ -7,6 +7,7 @@ const THRESHOLD = 30;
 function openCloseOnly(
   openMs: number,
   closeMs: number,
+  sourceSystem = "manual",
 ): ParsedFireExitEvent[] {
   return [
     {
@@ -15,6 +16,7 @@ function openCloseOnly(
       eventTime: "15/07/2026, 08:23:01",
       timestamp: openMs,
       csvDurationSeconds: null,
+      sourceSystem,
     },
     {
       door: "Ground - Adj David Clulow",
@@ -22,12 +24,13 @@ function openCloseOnly(
       eventTime: "15/07/2026, 08:41:12",
       timestamp: closeMs,
       csvDurationSeconds: null,
+      sourceSystem,
     },
   ];
 }
 
 describe("buildComplianceIncidents", () => {
-  it("creates incidents from open-close duration when it exceeds the threshold", () => {
+  it("creates incidents from open-close duration when it exceeds the threshold for non-Genetec sources", () => {
     const incidents = buildComplianceIncidents(
       openCloseOnly(0, 1091_000),
       { heldOpenThresholdSeconds: THRESHOLD },
@@ -36,7 +39,16 @@ describe("buildComplianceIncidents", () => {
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.durationSeconds).toBe(1091);
     expect(incidents[0]?.isExplicitAlarm).toBe(false);
-    expect(incidents[0]?.classification).toBe("derived_threshold_exceeded");
+    expect(incidents[0]?.classification).toBe("derived_open_duration");
+  });
+
+  it("does not create Genetec incidents from open-close duration alone", () => {
+    const incidents = buildComplianceIncidents(
+      openCloseOnly(0, 1091_000, "genetec"),
+      { heldOpenThresholdSeconds: THRESHOLD },
+    );
+
+    expect(incidents).toHaveLength(0);
   });
 
   it("does not create incidents at or below the threshold", () => {
@@ -57,6 +69,7 @@ describe("buildComplianceIncidents", () => {
           eventTime: "1/15/2025 8:00 AM",
           timestamp: 0,
           csvDurationSeconds: null,
+          sourceSystem: "genetec",
         },
         {
           door: "Fire Exit A",
@@ -64,6 +77,7 @@ describe("buildComplianceIncidents", () => {
           eventTime: "1/15/2025 8:05 AM",
           timestamp: 300_000,
           csvDurationSeconds: null,
+          sourceSystem: "genetec",
         },
         {
           door: "Fire Exit A",
@@ -71,6 +85,7 @@ describe("buildComplianceIncidents", () => {
           eventTime: "1/15/2025 8:10 AM",
           timestamp: 600_000,
           csvDurationSeconds: null,
+          sourceSystem: "genetec",
         },
       ],
       { heldOpenThresholdSeconds: THRESHOLD },
@@ -91,6 +106,7 @@ describe("buildComplianceIncidents", () => {
           eventTime: "1/15/2025 8:10 AM",
           timestamp: 600_000,
           csvDurationSeconds: 120,
+          sourceSystem: "genetec",
         },
       ],
       { heldOpenThresholdSeconds: THRESHOLD },

@@ -238,6 +238,21 @@ export async function loadParsedEventsForImports(
     return [];
   }
 
+  if (importIds.length === 1) {
+    return loadParsedEventsForSingleImport(importIds[0]!);
+  }
+
+  const events: ParsedFireExitEvent[] = [];
+  for (const importId of importIds) {
+    events.push(...(await loadParsedEventsForSingleImport(importId)));
+  }
+
+  return events;
+}
+
+async function loadParsedEventsForSingleImport(
+  importId: string,
+): Promise<ParsedFireExitEvent[]> {
   const supabase = getSupabaseAdmin();
   const pageSize = 1000;
   const allRows: ImportParsedEventRow[] = [];
@@ -249,7 +264,7 @@ export async function loadParsedEventsForImports(
       .select(
         "import_id, door, event_time, event_type, event_timestamp, csv_duration_seconds, source_row_number, source_sequence, source_event_id, source_system, site",
       )
-      .in("import_id", importIds)
+      .eq("import_id", importId)
       .order("event_timestamp", { ascending: true })
       .order("source_sequence", { ascending: true })
       .range(from, from + pageSize - 1);
@@ -281,46 +296,13 @@ export async function loadParsedEventsGroupedByImports(
     return { allEvents: [], eventsByImportId: new Map() };
   }
 
-  const supabase = getSupabaseAdmin();
-  const pageSize = 1000;
-  const allRows: ImportParsedEventRow[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await supabase
-      .from("import_parsed_events")
-      .select(
-        "import_id, door, event_time, event_type, event_timestamp, csv_duration_seconds, source_row_number, source_sequence, source_event_id, source_system, site",
-      )
-      .in("import_id", importIds)
-      .order("event_timestamp", { ascending: true })
-      .order("source_sequence", { ascending: true })
-      .range(from, from + pageSize - 1);
-
-    if (error) {
-      throw new Error(`Failed to load parsed events: ${error.message}`);
-    }
-
-    const batch = (data as ImportParsedEventRow[]) ?? [];
-    allRows.push(...batch);
-
-    if (batch.length < pageSize) {
-      break;
-    }
-
-    from += pageSize;
-  }
-
   const eventsByImportId = new Map<string, ParsedFireExitEvent[]>();
   const allEvents: ParsedFireExitEvent[] = [];
 
-  for (const row of allRows) {
-    const event = rowToParsedEvent(row as ImportParsedEventRow);
-
-    allEvents.push(event);
-    const bucket = eventsByImportId.get(row.import_id) ?? [];
-    bucket.push(event);
-    eventsByImportId.set(row.import_id, bucket);
+  for (const importId of importIds) {
+    const events = await loadParsedEventsForSingleImport(importId);
+    eventsByImportId.set(importId, events);
+    allEvents.push(...events);
   }
 
   return { allEvents, eventsByImportId };
