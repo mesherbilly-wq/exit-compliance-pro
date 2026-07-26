@@ -369,6 +369,19 @@ export async function loadDoorProfilesForImport(
   );
 }
 
+export async function loadDoorProfilesForImports(
+  importIds: string[],
+): Promise<Map<string, DoorIntelligenceProfile[]>> {
+  const entries = await Promise.all(
+    importIds.map(
+      async (importId) =>
+        [importId, await loadDoorProfilesForImport(importId)] as const,
+    ),
+  );
+
+  return new Map(entries);
+}
+
 export async function appendProcessingLog(
   importId: string,
   entries: ProcessingLogEntry[],

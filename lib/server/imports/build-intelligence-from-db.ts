@@ -1,5 +1,6 @@
 import type { FieldMapping } from "@/lib/imports/types";
 import type { ImportAnalysisSnapshot } from "@/lib/imports/types";
+import { ANALYTICS_ENGINE_VERSION } from "@/lib/analytics/analytics-engine-version";
 import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import {
   buildCanonicalIncidentsByDoor,
@@ -14,17 +15,24 @@ import type {
 } from "@/lib/analytics/types";
 import {
   loadDoorProfilesForImport,
+  loadDoorProfilesForImports,
   loadParsedEventsForImport,
   loadParsedEventsGroupedByImports,
 } from "@/lib/server/db/import-analytics-repository";
 import { listImportsForAnalytics } from "@/lib/server/db/latest-import";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
+import {
+  buildAccumulatedAnalyticsCacheKey,
+  getCachedAccumulatedAnalytics,
+  setCachedAccumulatedAnalytics,
+} from "@/lib/server/imports/accumulated-analytics-cache";
+import {
+  type AccumulatedImportAnalytics,
+  toClientImportAnalysisSnapshot,
+} from "@/lib/server/imports/import-analysis-snapshot";
+import { buildIntelligenceReportFromDoorProfiles } from "@/lib/server/imports/merge-stored-door-profiles";
 
-export type AccumulatedImportAnalytics = {
-  imports: ServerImportRecord[];
-  primaryImport: ServerImportRecord;
-  snapshot: ImportAnalysisSnapshot;
-};
+export type { AccumulatedImportAnalytics };
 
 function toImportContext(record: ServerImportRecord): ImportContext {
   return {
@@ -41,6 +49,21 @@ function buildImportContextMap(
   return new Map(imports.map((record) => [record.id, toImportContext(record)]));
 }
 
+export function importsAnalyticsAreFresh(
+  imports: ServerImportRecord[],
+  config: FireExitAnalyticsConfig,
+): boolean {
+  return imports.every(
+    (record) =>
+      record.has_analytics &&
+      Boolean(record.field_mapping) &&
+      (record.analytics_engine_version ?? null) === ANALYTICS_ENGINE_VERSION &&
+      (record.analytics_threshold_seconds ??
+        DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds) ===
+        config.heldOpenThresholdSeconds,
+  );
+}
+
 function runIntelligenceWithCanonicalIncidents(input: {
   eventsByImportId: Map<string, ParsedFireExitEvent[]>;
   importContexts: Map<string, ImportContext>;
@@ -50,10 +73,7 @@ function runIntelligenceWithCanonicalIncidents(input: {
   analyzedRowCount: number;
   hasDurationField: boolean;
   mapping: FieldMapping;
-}): {
-  intelligence: FireExitIntelligenceReport;
-  parsedEvents: ParsedFireExitEvent[];
-} {
+}): FireExitIntelligenceReport {
   const canonical = buildCanonicalIncidentsByDoor({
     eventsByImportId: input.eventsByImportId,
     importContexts: input.importContexts,
@@ -74,21 +94,66 @@ function runIntelligenceWithCanonicalIncidents(input: {
     },
   );
 
+  return normalizeIntelligenceReport(artifacts.report);
+}
+
+function formatAccumulatedSourceLabel(importCount: number): string {
+  return `Accumulated (${importCount} imports)`;
+}
+
+function wrapAccumulatedResult(
+  imports: ServerImportRecord[],
+  snapshot: ImportAnalysisSnapshot,
+): AccumulatedImportAnalytics {
   return {
-    intelligence: normalizeIntelligenceReport(artifacts.report),
-    parsedEvents: canonical.dedupedEvents,
+    imports,
+    primaryImport: imports.at(-1)!,
+    snapshot: toClientImportAnalysisSnapshot(snapshot),
   };
 }
 
-export async function buildAccumulatedImportAnalysisSnapshot(
-  config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
+async function buildAccumulatedFromStoredDoorProfiles(
+  imports: ServerImportRecord[],
+  config: FireExitAnalyticsConfig,
 ): Promise<AccumulatedImportAnalytics | null> {
-  const imports = await listImportsForAnalytics();
+  const importIds = imports.map((record) => record.id);
+  const profilesByImport = await loadDoorProfilesForImports(importIds);
+  const storedProfiles = [...profilesByImport.values()].flat();
 
-  if (imports.length === 0) {
+  if (storedProfiles.length === 0) {
     return null;
   }
 
+  const primaryImport = imports.at(-1)!;
+  const mapping = (primaryImport.field_mapping ?? {}) as FieldMapping;
+  const totalRowCount = imports.reduce((sum, record) => sum + record.row_count, 0);
+  const hasDurationField = imports.some((record) => record.has_duration_field);
+
+  const intelligence = buildIntelligenceReportFromDoorProfiles({
+    doors: storedProfiles,
+    config,
+    mapping,
+    sourceFileName:
+      imports.length === 1
+        ? primaryImport.file_name
+        : formatAccumulatedSourceLabel(imports.length),
+    analyzedRowCount: totalRowCount,
+    hasDurationField,
+    analyzedAt: primaryImport.created_at,
+  });
+
+  return wrapAccumulatedResult(imports, {
+    mapping: intelligence.mapping,
+    analyzedRowCount: totalRowCount,
+    intelligence,
+    hasDurationField,
+  });
+}
+
+async function buildAccumulatedFromLiveEvents(
+  imports: ServerImportRecord[],
+  config: FireExitAnalyticsConfig,
+): Promise<AccumulatedImportAnalytics | null> {
   const importIds = imports.map((record) => record.id);
   const importContexts = buildImportContextMap(imports);
   const { eventsByImportId } = await loadParsedEventsGroupedByImports(importIds);
@@ -107,7 +172,7 @@ export async function buildAccumulatedImportAnalysisSnapshot(
   const totalRowCount = imports.reduce((sum, record) => sum + record.row_count, 0);
   const hasDurationField = imports.some((record) => record.has_duration_field);
 
-  const { intelligence, parsedEvents } = runIntelligenceWithCanonicalIncidents({
+  const intelligence = runIntelligenceWithCanonicalIncidents({
     eventsByImportId,
     importContexts,
     config,
@@ -121,17 +186,44 @@ export async function buildAccumulatedImportAnalysisSnapshot(
     mapping,
   });
 
-  return {
-    imports,
-    primaryImport,
-    snapshot: {
-      mapping: intelligence.mapping,
-      analyzedRowCount: totalRowCount,
-      intelligence,
-      parsedEvents,
-      hasDurationField,
-    },
-  };
+  return wrapAccumulatedResult(imports, {
+    mapping: intelligence.mapping,
+    analyzedRowCount: totalRowCount,
+    intelligence,
+    hasDurationField,
+  });
+}
+
+export async function buildAccumulatedImportAnalysisSnapshot(
+  config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
+): Promise<AccumulatedImportAnalytics | null> {
+  const imports = await listImportsForAnalytics();
+
+  if (imports.length === 0) {
+    return null;
+  }
+
+  const cacheKey = buildAccumulatedAnalyticsCacheKey(imports, config);
+  const cached = getCachedAccumulatedAnalytics(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  let result: AccumulatedImportAnalytics | null = null;
+
+  if (importsAnalyticsAreFresh(imports, config)) {
+    result = await buildAccumulatedFromStoredDoorProfiles(imports, config);
+  }
+
+  if (!result) {
+    result = await buildAccumulatedFromLiveEvents(imports, config);
+  }
+
+  if (result) {
+    setCachedAccumulatedAnalytics(cacheKey, result);
+  }
+
+  return result;
 }
 
 async function buildAccumulatedFromSingleImportFallback(
@@ -145,27 +237,46 @@ async function buildAccumulatedFromSingleImportFallback(
     return null;
   }
 
-  return { imports, primaryImport, snapshot };
-}
-
-function formatAccumulatedSourceLabel(importCount: number): string {
-  return `Accumulated (${importCount} imports)`;
+  return wrapAccumulatedResult(imports, snapshot);
 }
 
 export async function buildIntelligenceReportFromImport(
   record: ServerImportRecord,
   config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
 ): Promise<FireExitIntelligenceReport | null> {
+  const mapping = (record.field_mapping ?? {}) as FieldMapping;
+
+  if (
+    record.has_analytics &&
+    record.field_mapping &&
+    (record.analytics_engine_version ?? null) === ANALYTICS_ENGINE_VERSION &&
+    (record.analytics_threshold_seconds ??
+      DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds) ===
+      config.heldOpenThresholdSeconds
+  ) {
+    const doors = await loadDoorProfilesForImport(record.id);
+    if (doors.length > 0) {
+      return buildIntelligenceReportFromDoorProfiles({
+        doors,
+        config,
+        mapping,
+        sourceFileName: record.file_name,
+        analyzedRowCount: record.row_count,
+        hasDurationField: record.has_duration_field ?? false,
+        analyzedAt: record.created_at,
+      });
+    }
+  }
+
   const parsedEvents = await loadParsedEventsForImport(record.id).catch(
     (): ParsedFireExitEvent[] => [],
   );
 
   if (parsedEvents.length > 0 && record.field_mapping) {
-    const mapping = record.field_mapping as FieldMapping;
     const eventsByImportId = new Map([[record.id, parsedEvents]]);
     const importContexts = new Map([[record.id, toImportContext(record)]]);
 
-    const { intelligence } = runIntelligenceWithCanonicalIncidents({
+    return runIntelligenceWithCanonicalIncidents({
       eventsByImportId,
       importContexts,
       config,
@@ -175,14 +286,20 @@ export async function buildIntelligenceReportFromImport(
       hasDurationField: record.has_duration_field ?? false,
       mapping,
     });
-
-    return intelligence;
   }
 
   const doors = await loadDoorProfilesForImport(record.id);
 
   if (doors.length > 0) {
-    return rebuildFromDoorProfiles(record, doors, config);
+    return buildIntelligenceReportFromDoorProfiles({
+      doors,
+      config,
+      mapping,
+      sourceFileName: record.file_name,
+      analyzedRowCount: record.row_count,
+      hasDurationField: record.has_duration_field ?? false,
+      analyzedAt: record.created_at,
+    });
   }
 
   if (record.analysis_snapshot) {
@@ -195,65 +312,6 @@ export async function buildIntelligenceReportFromImport(
   return null;
 }
 
-function rebuildFromDoorProfiles(
-  record: ServerImportRecord,
-  doors: FireExitIntelligenceReport["doors"],
-  config: FireExitAnalyticsConfig,
-): FireExitIntelligenceReport {
-  const totalFireExitEvents = doors.reduce(
-    (sum, door) => sum + door.totalFireExitEvents,
-    0,
-  );
-  const totalHeldOpenEvents = doors.reduce(
-    (sum, door) => sum + door.totalIncidents,
-    0,
-  );
-  const totalExposureSeconds = doors.reduce(
-    (sum, door) => sum + door.totalExposureSeconds,
-    0,
-  );
-
-  const overallComplianceScore =
-    doors.length > 0
-      ? Math.round(
-          doors.reduce((sum, door) => sum + door.complianceScore, 0) / doors.length,
-        )
-      : 100;
-
-  const mapping = (record.field_mapping ?? {}) as FieldMapping;
-
-  return normalizeIntelligenceReport({
-    config,
-    mapping,
-    sourceFileName: record.file_name,
-    analyzedRowCount: record.row_count,
-    analyzedAt: record.created_at,
-    doors,
-    doorComplianceProfiles: doors
-      .map((door) => door.complianceProfile)
-      .filter((profile): profile is NonNullable<typeof profile> => !!profile),
-    summary: {
-      totalDoors: doors.length,
-      doorsWithViolations: doors.filter((door) => door.totalIncidents > 0).length,
-      totalFireExitEvents,
-      totalHeldOpenEvents,
-      totalExposureSeconds,
-      totalExposureLabel: formatExposureLabel(totalExposureSeconds),
-      overallComplianceScore,
-      excellentDoors: doors.filter((door) => door.status === "Excellent").length,
-      doorsNeedingAttention: doors.filter(
-        (door) => door.status === "Needs Attention",
-      ).length,
-      criticalDoors: doors.filter((door) => door.status === "Critical").length,
-      worstDoor:
-        [...doors].sort(
-          (a, b) => a.complianceScore - b.complianceScore,
-        )[0]?.door ?? "N/A",
-      hasDurationField: record.has_duration_field ?? false,
-    },
-  });
-}
-
 export async function buildImportAnalysisSnapshotFromImport(
   record: ServerImportRecord,
   config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
@@ -264,36 +322,10 @@ export async function buildImportAnalysisSnapshotFromImport(
     return null;
   }
 
-  let parsedEvents: ParsedFireExitEvent[] = [];
-  try {
-    parsedEvents = await loadParsedEventsForImport(record.id);
-  } catch {
-    const snapshot = record.analysis_snapshot as ImportAnalysisSnapshot | null;
-    parsedEvents = snapshot?.parsedEvents ?? [];
-  }
-
-  return {
+  return toClientImportAnalysisSnapshot({
     mapping: intelligence.mapping,
     analyzedRowCount: record.row_count,
     intelligence,
-    parsedEvents,
     hasDurationField: intelligence.summary.hasDurationField,
-  };
-}
-
-function formatExposureLabel(totalSeconds: number): string {
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes < 60) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  });
 }

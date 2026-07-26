@@ -9,6 +9,7 @@ import {
 } from "@/lib/server/db/inbound-email-repository";
 import {
   appendProcessingLog,
+  loadParsedEventsForImport,
   persistImportAnalytics,
 } from "@/lib/server/db/import-analytics-repository";
 import { getFailedCsvRetentionDays, getSupabaseStorageBucket } from "@/lib/server/env";
@@ -25,7 +26,7 @@ import {
 import type { FireExitAnalyticsConfig } from "@/lib/analytics/types";
 import type { FieldMapping } from "@/lib/imports/types";
 import { areRequiredFieldsMapped } from "@/lib/imports/mapping-utils";
-import { loadParsedEventsForImport } from "@/lib/server/db/import-analytics-repository";
+import { invalidateAccumulatedAnalyticsCache } from "@/lib/server/imports/accumulated-analytics-cache";
 
 function failedCsvRetentionUntil(): string {
   const days = getFailedCsvRetentionDays();
@@ -154,6 +155,7 @@ export async function completeImportProcessing(
     parsedEvents: result.analysisSnapshot.parsedEvents ?? [],
     analyticsThresholdSeconds: input.config?.heldOpenThresholdSeconds,
   });
+  invalidateAccumulatedAnalyticsCache();
 
   logger.info(
     `Persisted ${analytics.incidentCount} incidents across ${analytics.doorCount} doors.`,
@@ -305,6 +307,7 @@ export async function reprocessImport(
     parsedEvents,
     analyticsThresholdSeconds: config?.heldOpenThresholdSeconds,
   });
+  invalidateAccumulatedAnalyticsCache();
 
   logger.info(
     `Reprocessed ${analytics.incidentCount} incidents across ${analytics.doorCount} doors.`,

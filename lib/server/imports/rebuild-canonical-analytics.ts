@@ -21,6 +21,7 @@ import {
 } from "@/lib/server/db/inbound-email-repository";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 import { areRequiredFieldsMapped } from "@/lib/imports/mapping-utils";
+import { invalidateAccumulatedAnalyticsCache } from "@/lib/server/imports/accumulated-analytics-cache";
 
 export type RebuildCanonicalAnalyticsResult = {
   refreshed: number;
@@ -175,6 +176,8 @@ export async function rebuildImportsWithCanonicalEngine(
       skipped += 1;
     }
   }
+
+  invalidateAccumulatedAnalyticsCache();
 
   return { refreshed, skipped };
 }

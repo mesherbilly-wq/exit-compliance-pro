@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildAccumulatedImportAnalysisSnapshot } from "@/lib/server/imports/build-intelligence-from-db";
+import { reportingPeriodFromImports } from "@/lib/server/imports/import-analysis-snapshot";
 import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import { isSupabaseConfigured } from "@/lib/server/env";
 
@@ -15,13 +16,6 @@ function parseThreshold(request: Request): number {
   }
 
   return DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds;
-}
-
-function formatReportingPeriod(
-  start: string | null,
-  end: string | null,
-): { start: string | null; end: string | null } {
-  return { start, end };
 }
 
 export async function GET(request: Request) {
@@ -41,23 +35,7 @@ export async function GET(request: Request) {
     }
 
     const { imports, primaryImport, snapshot } = accumulated;
-    const timestamps = (snapshot.parsedEvents ?? [])
-      .map((event) => event.timestamp)
-      .filter((value) => Number.isFinite(value));
-
-    const reportingPeriodStart =
-      timestamps.length > 0
-        ? new Date(Math.min(...timestamps)).toISOString()
-        : primaryImport.reporting_period_start;
-    const reportingPeriodEnd =
-      timestamps.length > 0
-        ? new Date(Math.max(...timestamps)).toISOString()
-        : primaryImport.reporting_period_end;
-
-    const { start, end } = formatReportingPeriod(
-      reportingPeriodStart,
-      reportingPeriodEnd,
-    );
+    const { start, end } = reportingPeriodFromImports(imports);
 
     return NextResponse.json({
       configured: true,
