@@ -2,6 +2,7 @@ import type { TrendsPeriodPreset } from "@/lib/analytics/trends-period";
 
 export type ExecutivePdfRequestBody = {
   heldOpenThresholdSeconds?: number;
+  importDataRetentionDays?: number;
   period?: TrendsPeriodPreset;
   customStart?: string;
   customEnd?: string;
@@ -44,6 +45,18 @@ export function parseExecutivePdfRequestBody(
     }
 
     result.heldOpenThresholdSeconds = threshold;
+  }
+
+  if ("importDataRetentionDays" in body) {
+    const retentionDays = Number(body.importDataRetentionDays);
+    if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
+      return {
+        valid: false,
+        error: "importDataRetentionDays must be a positive number.",
+      };
+    }
+
+    result.importDataRetentionDays = retentionDays;
   }
 
   if ("period" in body) {

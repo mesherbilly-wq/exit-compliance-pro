@@ -22,6 +22,10 @@ import {
 import type { FireExitAnalyticsConfig } from "@/lib/analytics/types";
 import { getDoorIncidents } from "@/lib/analytics/normalize-intelligence";
 import { loadParsedEventsGroupedByImports } from "@/lib/server/db/import-analytics-repository";
+import {
+  getEventLoadOptionsForRetention,
+  listImportsForAnalytics,
+} from "@/lib/server/db/latest-import";
 import { buildAccumulatedImportAnalysisSnapshot } from "@/lib/server/imports/build-intelligence-from-db";
 import type { RiskRating } from "@/lib/analytics/types";
 
@@ -71,7 +75,10 @@ export async function buildAttentionCentreApiResponse(input: {
   const intelligence = snapshot.intelligence;
   const importIds = imports.map((record) => record.id);
   const { allEvents, eventsByImportId } =
-    await loadParsedEventsGroupedByImports(importIds);
+    await loadParsedEventsGroupedByImports(
+      importIds,
+      getEventLoadOptionsForRetention(config),
+    );
   const { startMs, endMs } = getEventTimestampBounds(allEvents);
   const importRefs = imports.map((record) => ({
     id: record.id,

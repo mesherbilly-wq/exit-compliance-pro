@@ -17,6 +17,7 @@ import { sanitizeAttachmentFileName } from "@/lib/server/inbound-email/attachmen
 import { processCsvImport } from "@/lib/server/imports/process-csv-import";
 import { runFireExitIntelligenceFromParsedEvents } from "@/lib/analytics/fire-exit-intelligence-engine";
 import { buildCanonicalIncidentsByDoor } from "@/lib/analytics/canonical-incident-engine";
+import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import { toImportAnalysisSnapshot } from "@/lib/imports/import-analysis";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 import {
@@ -273,7 +274,7 @@ export async function reprocessImport(
     const canonical = buildCanonicalIncidentsByDoor({
       eventsByImportId,
       importContexts,
-      config: config ?? { heldOpenThresholdSeconds: 30 },
+      config: config ?? DEFAULT_ANALYTICS_CONFIG,
     });
     const artifacts = runFireExitIntelligenceFromParsedEvents(
       canonical.dedupedEvents,

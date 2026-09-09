@@ -1,22 +1,10 @@
 import { NextResponse } from "next/server";
 import { buildAccumulatedImportAnalysisSnapshot } from "@/lib/server/imports/build-intelligence-from-db";
 import { reportingPeriodFromImports } from "@/lib/server/imports/import-analysis-snapshot";
-import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
+import { parseAnalyticsConfigFromRequest } from "@/lib/analytics/parse-analytics-config";
 import { isSupabaseConfigured } from "@/lib/server/env";
 
 export const runtime = "nodejs";
-
-function parseThreshold(request: Request): number {
-  const url = new URL(request.url);
-  const raw = url.searchParams.get("heldOpenThresholdSeconds");
-  const threshold = Number(raw);
-
-  if (Number.isFinite(threshold) && threshold > 0) {
-    return threshold;
-  }
-
-  return DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds;
-}
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -24,10 +12,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const config = {
-      heldOpenThresholdSeconds: parseThreshold(request),
-    };
-
+    const config = parseAnalyticsConfigFromRequest(request);
     const accumulated = await buildAccumulatedImportAnalysisSnapshot(config);
 
     if (!accumulated) {
@@ -62,6 +47,7 @@ export async function GET(request: Request) {
         complianceScoreSnapshot:
           snapshot.intelligence.summary.overallComplianceScore,
         accumulatedImportIds: imports.map((record) => record.id),
+        importDataRetentionDays: config.importDataRetentionDays,
       },
     });
   } catch (error) {

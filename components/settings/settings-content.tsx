@@ -3,11 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_ANALYTICS_CONFIG,
+  DEFAULT_IMPORT_DATA_RETENTION_DAYS,
   getAnalyticsConfig,
   saveAnalyticsConfig,
 } from "@/lib/analytics/config";
+import {
+  MAX_IMPORT_DATA_RETENTION_DAYS,
+  MIN_IMPORT_DATA_RETENTION_DAYS,
+} from "@/lib/analytics/import-data-retention";
 import { formatDurationReadable } from "@/lib/reports/held-open-detection";
 import { refreshImportAnalysis } from "@/lib/client/imports-api";
+import { dispatchImportsRefreshed } from "@/lib/imports/imports-refreshed";
 import { InboundEmailSettingsPanel } from "@/components/settings/inbound-email-settings-panel";
 
 function buildRefreshMessage(result: {
@@ -57,6 +63,9 @@ export function SettingsContent() {
   const [thresholdSeconds, setThresholdSeconds] = useState(
     DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds,
   );
+  const [retentionDays, setRetentionDays] = useState(
+    DEFAULT_IMPORT_DATA_RETENTION_DAYS,
+  );
   const [saved, setSaved] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
 
@@ -65,6 +74,7 @@ export function SettingsContent() {
     const parts = splitThresholdSeconds(loaded.heldOpenThresholdSeconds);
     setThresholdMinutes(parts.minutes);
     setThresholdSeconds(parts.seconds);
+    setRetentionDays(loaded.importDataRetentionDays);
   }, []);
 
   const totalThresholdSeconds = useMemo(
@@ -79,16 +89,27 @@ export function SettingsContent() {
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
-    saveAnalyticsConfig({
+    const previous = getAnalyticsConfig();
+    const nextConfig = {
       heldOpenThresholdSeconds: totalThresholdSeconds,
-    });
+      importDataRetentionDays: retentionDays,
+    };
+    saveAnalyticsConfig(nextConfig);
 
     try {
-      const refreshResult = await refreshImportAnalysis({
-        heldOpenThresholdSeconds: totalThresholdSeconds,
-      });
-      setSaved(true);
-      setRefreshMessage(buildRefreshMessage(refreshResult));
+      if (
+        previous.heldOpenThresholdSeconds !== nextConfig.heldOpenThresholdSeconds
+      ) {
+        const refreshResult = await refreshImportAnalysis(nextConfig);
+        setSaved(true);
+        setRefreshMessage(buildRefreshMessage(refreshResult));
+      } else {
+        dispatchImportsRefreshed();
+        setSaved(true);
+        setRefreshMessage(
+          "Settings saved. Dashboards now use the updated import data retention window.",
+        );
+      }
     } catch {
       setSaved(true);
       setRefreshMessage("Settings saved, but import recalculation failed.");
@@ -110,15 +131,49 @@ export function SettingsContent() {
           Fire Exit Intelligence Settings
         </h2>
         <p className="mt-4 text-slate-300">
-          Configure held-open thresholds used by the analytics engine across all
-          fire exit reports.
+          Configure held-open thresholds and how much historical import data is
+          included in dashboards, trends, and reports.
         </p>
       </div>
 
       <form
         onSubmit={handleSave}
-        className="rounded-2xl border border-slate-800 bg-slate-900 p-6"
+        className="space-y-8 rounded-2xl border border-slate-800 bg-slate-900 p-6"
       >
+        <section>
+          <p className="text-sm font-medium text-white">Import data retention</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Only events and incidents from the past{" "}
+            {retentionDays} day{retentionDays === 1 ? "" : "s"} are included in
+            analytics. Older import activity is kept in storage but excluded from
+            dashboards, door profiles, trends, heat maps, and PDF exports.
+          </p>
+
+          <label className="mt-4 block max-w-xs">
+            <span className="text-sm text-slate-300">Retention period (days)</span>
+            <input
+              id="import-data-retention-days"
+              type="number"
+              min={MIN_IMPORT_DATA_RETENTION_DAYS}
+              max={MAX_IMPORT_DATA_RETENTION_DAYS}
+              value={retentionDays}
+              onChange={(event) =>
+                setRetentionDays(
+                  Math.min(
+                    MAX_IMPORT_DATA_RETENTION_DAYS,
+                    Math.max(
+                      MIN_IMPORT_DATA_RETENTION_DAYS,
+                      Number(event.target.value) || MIN_IMPORT_DATA_RETENTION_DAYS,
+                    ),
+                  ),
+                )
+              }
+              className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            />
+          </label>
+        </section>
+
+        <section>
         <p className="text-sm font-medium text-white">Held-open threshold</p>
         <p className="mt-1 text-sm text-slate-400">
           Only time exceeding this threshold counts toward time beyond threshold.
@@ -164,8 +219,9 @@ export function SettingsContent() {
             {formatDurationReadable(totalThresholdSeconds)}
           </span>
         </p>
+        </section>
 
-        <div className="mt-6 flex items-center gap-3">
+        <div className="flex items-center gap-3">
           <button
             type="submit"
             className="rounded-lg bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400"

@@ -17,7 +17,10 @@ import {
 } from "@/lib/analytics/trends-period";
 import type { FireExitAnalyticsConfig, ParsedFireExitEvent } from "@/lib/analytics/types";
 import { loadParsedEventsGroupedByImports } from "@/lib/server/db/import-analytics-repository";
-import { listImportsForAnalytics } from "@/lib/server/db/latest-import";
+import {
+  getEventLoadOptionsForRetention,
+  listImportsForAnalytics,
+} from "@/lib/server/db/latest-import";
 
 export type BuildExecutiveReportForExportInput = {
   config?: FireExitAnalyticsConfig;
@@ -67,7 +70,7 @@ export async function buildExecutiveReportForExport(
   input: BuildExecutiveReportForExportInput = {},
 ): Promise<BuildExecutiveReportForExportResult> {
   const config = input.config ?? DEFAULT_ANALYTICS_CONFIG;
-  const imports = await listImportsForAnalytics();
+  const imports = await listImportsForAnalytics(config);
 
   if (imports.length === 0) {
     return {
@@ -79,7 +82,10 @@ export async function buildExecutiveReportForExport(
 
   const importIds = imports.map((record) => record.id);
   const { allEvents, eventsByImportId } =
-    await loadParsedEventsGroupedByImports(importIds);
+    await loadParsedEventsGroupedByImports(
+      importIds,
+      getEventLoadOptionsForRetention(config),
+    );
   const { startMs, endMs } = getEventTimestampBounds(allEvents);
 
   if (startMs === null || endMs === null || allEvents.length === 0) {

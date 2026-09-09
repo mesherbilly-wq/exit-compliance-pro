@@ -227,24 +227,26 @@ export async function persistImportAnalytics(
 
 export async function loadParsedEventsForImport(
   importId: string,
+  options?: { minTimestamp?: number },
 ): Promise<ParsedFireExitEvent[]> {
-  return loadParsedEventsForImports([importId]);
+  return loadParsedEventsForImports([importId], options);
 }
 
 export async function loadParsedEventsForImports(
   importIds: string[],
+  options?: { minTimestamp?: number },
 ): Promise<ParsedFireExitEvent[]> {
   if (importIds.length === 0) {
     return [];
   }
 
   if (importIds.length === 1) {
-    return loadParsedEventsForSingleImport(importIds[0]!);
+    return loadParsedEventsForSingleImport(importIds[0]!, options);
   }
 
   const events: ParsedFireExitEvent[] = [];
   for (const importId of importIds) {
-    events.push(...(await loadParsedEventsForSingleImport(importId)));
+    events.push(...(await loadParsedEventsForSingleImport(importId, options)));
   }
 
   return events;
@@ -252,6 +254,7 @@ export async function loadParsedEventsForImports(
 
 async function loadParsedEventsForSingleImport(
   importId: string,
+  options?: { minTimestamp?: number },
 ): Promise<ParsedFireExitEvent[]> {
   const supabase = getSupabaseAdmin();
   const pageSize = 1000;
@@ -259,15 +262,20 @@ async function loadParsedEventsForSingleImport(
   let from = 0;
 
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("import_parsed_events")
       .select(
         "import_id, door, event_time, event_type, event_timestamp, csv_duration_seconds, source_row_number, source_sequence, source_event_id, source_system, site",
       )
       .eq("import_id", importId)
       .order("event_timestamp", { ascending: true })
-      .order("source_sequence", { ascending: true })
-      .range(from, from + pageSize - 1);
+      .order("source_sequence", { ascending: true });
+
+    if (options?.minTimestamp != null) {
+      query = query.gte("event_timestamp", options.minTimestamp);
+    }
+
+    const { data, error } = await query.range(from, from + pageSize - 1);
 
     if (error) {
       throw new Error(`Failed to load parsed events: ${error.message}`);
@@ -288,6 +296,7 @@ async function loadParsedEventsForSingleImport(
 
 export async function loadParsedEventsGroupedByImports(
   importIds: string[],
+  options?: { minTimestamp?: number },
 ): Promise<{
   allEvents: ParsedFireExitEvent[];
   eventsByImportId: Map<string, ParsedFireExitEvent[]>;
@@ -300,7 +309,7 @@ export async function loadParsedEventsGroupedByImports(
   const allEvents: ParsedFireExitEvent[] = [];
 
   for (const importId of importIds) {
-    const events = await loadParsedEventsForSingleImport(importId);
+    const events = await loadParsedEventsForSingleImport(importId, options);
     eventsByImportId.set(importId, events);
     allEvents.push(...events);
   }

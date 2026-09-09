@@ -1,11 +1,17 @@
 import type { FireExitAnalyticsConfig } from "./types";
+import {
+  DEFAULT_IMPORT_DATA_RETENTION_DAYS,
+  normalizeImportDataRetentionDays,
+} from "./import-data-retention";
 
 const CONFIG_STORAGE_KEY = "exit-compliance-pro:analytics-config";
 
 export const DEFAULT_HELD_OPEN_THRESHOLD_SECONDS = 30;
+export { DEFAULT_IMPORT_DATA_RETENTION_DAYS };
 
 export const DEFAULT_ANALYTICS_CONFIG: FireExitAnalyticsConfig = {
   heldOpenThresholdSeconds: DEFAULT_HELD_OPEN_THRESHOLD_SECONDS,
+  importDataRetentionDays: DEFAULT_IMPORT_DATA_RETENTION_DAYS,
 };
 
 export function getAnalyticsConfig(): FireExitAnalyticsConfig {
@@ -27,6 +33,9 @@ export function getAnalyticsConfig(): FireExitAnalyticsConfig {
         Number.isFinite(threshold) && threshold > 0
           ? threshold
           : DEFAULT_HELD_OPEN_THRESHOLD_SECONDS,
+      importDataRetentionDays: normalizeImportDataRetentionDays(
+        parsed.importDataRetentionDays,
+      ),
     };
   } catch {
     return DEFAULT_ANALYTICS_CONFIG;

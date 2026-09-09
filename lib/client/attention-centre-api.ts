@@ -1,4 +1,5 @@
 import { getAnalyticsConfig } from "@/lib/analytics/config";
+import { buildAnalyticsConfigQueryString } from "@/lib/analytics/parse-analytics-config";
 import type { AttentionCentreDashboard } from "@/lib/analytics/attention-centre/types";
 import type { AttentionCentreFilters } from "@/lib/analytics/attention-centre/types";
 
@@ -12,9 +13,7 @@ export async function fetchAttentionCentreDashboard(
   filters: Partial<AttentionCentreFilters> = {},
 ): Promise<AttentionCentreApiPayload> {
   const config = getAnalyticsConfig();
-  const params = new URLSearchParams({
-    heldOpenThresholdSeconds: String(config.heldOpenThresholdSeconds),
-  });
+  const params = new URLSearchParams(buildAnalyticsConfigQueryString(config));
 
   if (filters.risk && filters.risk !== "All") {
     params.set("risk", filters.risk);

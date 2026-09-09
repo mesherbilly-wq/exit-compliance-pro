@@ -1,4 +1,5 @@
 import { ANALYTICS_ENGINE_VERSION } from "./analytics-engine-version";
+import { DEFAULT_ANALYTICS_CONFIG } from "./config";
 import { buildComplianceIncidents } from "./compliance-incidents";
 import {
   attachImportMetadata,
@@ -315,7 +316,7 @@ export function buildDedupedEventsFromImportGroups(
 ): ParsedFireExitEvent[] {
   return buildCanonicalIncidentsByDoor({
     eventsByImportId,
-    config: { heldOpenThresholdSeconds: 30 },
+    config: DEFAULT_ANALYTICS_CONFIG,
   }).dedupedEvents;
 }
 

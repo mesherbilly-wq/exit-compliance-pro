@@ -19,7 +19,10 @@ import {
   loadParsedEventsForImport,
   loadParsedEventsGroupedByImports,
 } from "@/lib/server/db/import-analytics-repository";
-import { listImportsForAnalytics } from "@/lib/server/db/latest-import";
+import {
+  getEventLoadOptionsForRetention,
+  listImportsForAnalytics,
+} from "@/lib/server/db/latest-import";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 import {
   buildAccumulatedAnalyticsCacheKey,
@@ -30,7 +33,10 @@ import {
   type AccumulatedImportAnalytics,
   toClientImportAnalysisSnapshot,
 } from "@/lib/server/imports/import-analysis-snapshot";
-import { buildIntelligenceReportFromDoorProfiles } from "@/lib/server/imports/merge-stored-door-profiles";
+import {
+  buildIntelligenceReportFromDoorProfiles,
+  rebuildStoredProfilesForRetention,
+} from "@/lib/server/imports/merge-stored-door-profiles";
 
 export type { AccumulatedImportAnalytics };
 
@@ -117,7 +123,11 @@ async function buildAccumulatedFromStoredDoorProfiles(
   config: FireExitAnalyticsConfig,
 ): Promise<AccumulatedImportAnalytics | null> {
   const importIds = imports.map((record) => record.id);
-  const profilesByImport = await loadDoorProfilesForImports(importIds);
+  const eventLoadOptions = getEventLoadOptionsForRetention(config);
+  const [{ eventsByImportId }, profilesByImport] = await Promise.all([
+    loadParsedEventsGroupedByImports(importIds, eventLoadOptions),
+    loadDoorProfilesForImports(importIds),
+  ]);
   const storedProfiles = [...profilesByImport.values()].flat();
 
   if (storedProfiles.length === 0) {
@@ -129,8 +139,18 @@ async function buildAccumulatedFromStoredDoorProfiles(
   const totalRowCount = imports.reduce((sum, record) => sum + record.row_count, 0);
   const hasDurationField = imports.some((record) => record.has_duration_field);
 
+  const rebuiltDoors = rebuildStoredProfilesForRetention({
+    profiles: storedProfiles,
+    eventsByImportId,
+    config,
+  });
+
+  if (rebuiltDoors.length === 0) {
+    return null;
+  }
+
   const intelligence = buildIntelligenceReportFromDoorProfiles({
-    doors: storedProfiles,
+    doors: rebuiltDoors,
     config,
     mapping,
     sourceFileName:
@@ -156,7 +176,10 @@ async function buildAccumulatedFromLiveEvents(
 ): Promise<AccumulatedImportAnalytics | null> {
   const importIds = imports.map((record) => record.id);
   const importContexts = buildImportContextMap(imports);
-  const { eventsByImportId } = await loadParsedEventsGroupedByImports(importIds);
+  const { eventsByImportId } = await loadParsedEventsGroupedByImports(
+    importIds,
+    getEventLoadOptionsForRetention(config),
+  );
   const primaryImport = imports.at(-1)!;
   const mapping = (primaryImport.field_mapping ?? {}) as FieldMapping;
 
@@ -197,7 +220,7 @@ async function buildAccumulatedFromLiveEvents(
 export async function buildAccumulatedImportAnalysisSnapshot(
   config: FireExitAnalyticsConfig = DEFAULT_ANALYTICS_CONFIG,
 ): Promise<AccumulatedImportAnalytics | null> {
-  const imports = await listImportsForAnalytics();
+  const imports = await listImportsForAnalytics(config);
 
   if (imports.length === 0) {
     return null;
@@ -256,21 +279,36 @@ export async function buildIntelligenceReportFromImport(
   ) {
     const doors = await loadDoorProfilesForImport(record.id);
     if (doors.length > 0) {
-      return buildIntelligenceReportFromDoorProfiles({
-        doors,
+      const events = await loadParsedEventsForImport(
+        record.id,
+        getEventLoadOptionsForRetention(config),
+      );
+      const rebuiltDoors = rebuildStoredProfilesForRetention({
+        profiles: doors,
+        eventsByImportId: new Map([[record.id, events]]),
         config,
-        mapping,
-        sourceFileName: record.file_name,
-        analyzedRowCount: record.row_count,
-        hasDurationField: record.has_duration_field ?? false,
-        analyzedAt: record.created_at,
       });
+
+      if (rebuiltDoors.length > 0) {
+        return buildIntelligenceReportFromDoorProfiles({
+          doors: rebuiltDoors,
+          config,
+          mapping,
+          sourceFileName: record.file_name,
+          analyzedRowCount: record.row_count,
+          hasDurationField: record.has_duration_field ?? false,
+          analyzedAt: record.created_at,
+        });
+      }
+
+      return null;
     }
   }
 
-  const parsedEvents = await loadParsedEventsForImport(record.id).catch(
-    (): ParsedFireExitEvent[] => [],
-  );
+  const parsedEvents = await loadParsedEventsForImport(
+    record.id,
+    getEventLoadOptionsForRetention(config),
+  ).catch((): ParsedFireExitEvent[] => []);
 
   if (parsedEvents.length > 0 && record.field_mapping) {
     const eventsByImportId = new Map([[record.id, parsedEvents]]);

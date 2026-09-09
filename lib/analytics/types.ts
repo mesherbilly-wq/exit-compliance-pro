@@ -21,6 +21,7 @@ export type OperationalPattern =
 
 export type FireExitAnalyticsConfig = {
   heldOpenThresholdSeconds: number;
+  importDataRetentionDays: number;
 };
 
 export type IncidentDurationBucket =

@@ -25,7 +25,7 @@ export async function downloadExecutiveReportPdf(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      heldOpenThresholdSeconds: config.heldOpenThresholdSeconds,
+      ...config,
       period: options.period,
       customStart: options.customStart,
       customEnd: options.customEnd,

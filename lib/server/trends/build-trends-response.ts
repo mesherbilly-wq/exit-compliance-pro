@@ -14,7 +14,10 @@ import {
 } from "@/lib/analytics/trends-period";
 import type { FireExitAnalyticsConfig } from "@/lib/analytics/types";
 import { loadParsedEventsGroupedByImports } from "@/lib/server/db/import-analytics-repository";
-import { listImportsForAnalytics } from "@/lib/server/db/latest-import";
+import {
+  getEventLoadOptionsForRetention,
+  listImportsForAnalytics,
+} from "@/lib/server/db/latest-import";
 
 export type TrendsApiResponse = {
   configured: boolean;
@@ -34,7 +37,7 @@ export async function buildTrendsApiResponse(input: {
   config?: FireExitAnalyticsConfig;
 }): Promise<TrendsApiResponse> {
   const config = input.config ?? DEFAULT_ANALYTICS_CONFIG;
-  const imports = await listImportsForAnalytics();
+  const imports = await listImportsForAnalytics(config);
 
   if (imports.length === 0) {
     return {
@@ -48,7 +51,10 @@ export async function buildTrendsApiResponse(input: {
 
   const importIds = imports.map((record) => record.id);
   const { allEvents, eventsByImportId } =
-    await loadParsedEventsGroupedByImports(importIds);
+    await loadParsedEventsGroupedByImports(
+      importIds,
+      getEventLoadOptionsForRetention(config),
+    );
   const { startMs, endMs } = getEventTimestampBounds(allEvents);
 
   if (startMs === null || endMs === null) {

@@ -1,11 +1,15 @@
 import { attachComplianceProfilesToReport } from "@/lib/analytics/door-compliance-profile";
 import { normalizeIntelligenceReport } from "@/lib/analytics/normalize-intelligence";
 import { dedupeIncidents } from "@/lib/analytics/dedupe-parsed-events";
+import { filterIncidentsByRetention } from "@/lib/analytics/import-data-retention";
+import { groupEventsByDoor } from "@/lib/analytics/parse-events";
 import { buildDoorIntelligenceProfile } from "@/lib/analytics/scoring";
 import type {
+  ComplianceIncident,
   DoorIntelligenceProfile,
   FireExitAnalyticsConfig,
   FireExitIntelligenceReport,
+  ParsedFireExitEvent,
 } from "@/lib/analytics/types";
 import type { FieldMapping } from "@/lib/imports/types";
 
@@ -39,6 +43,50 @@ export function mergeDoorProfilesByName(
         incidents,
       );
     });
+}
+
+export function rebuildStoredProfilesForRetention(input: {
+  profiles: DoorIntelligenceProfile[];
+  eventsByImportId: Map<string, ParsedFireExitEvent[]>;
+  config: FireExitAnalyticsConfig;
+}): DoorIntelligenceProfile[] {
+  const groupedEvents = groupEventsByDoor(
+    [...input.eventsByImportId.values()].flat(),
+  );
+  const incidentsByDoor = new Map<string, ComplianceIncident[]>();
+
+  for (const profile of input.profiles) {
+    const filteredIncidents = filterIncidentsByRetention(
+      profile.incidents ?? profile.sessions ?? [],
+      input.config,
+    );
+
+    if (filteredIncidents.length === 0) {
+      continue;
+    }
+
+    const existing = incidentsByDoor.get(profile.door) ?? [];
+    incidentsByDoor.set(
+      profile.door,
+      dedupeIncidents([...existing, ...filteredIncidents]),
+    );
+  }
+
+  const doorNames = new Set<string>([
+    ...groupedEvents.keys(),
+    ...incidentsByDoor.keys(),
+  ]);
+
+  return [...doorNames]
+    .sort((left, right) => left.localeCompare(right))
+    .map((door) =>
+      buildDoorIntelligenceProfile(
+        door,
+        groupedEvents.get(door)?.length ?? 0,
+        incidentsByDoor.get(door) ?? [],
+      ),
+    )
+    .filter((door) => door.totalIncidents > 0 || door.totalFireExitEvents > 0);
 }
 
 export function buildIntelligenceReportFromDoorProfiles(input: {

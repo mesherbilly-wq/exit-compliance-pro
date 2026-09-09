@@ -1,4 +1,5 @@
 import { getAnalyticsConfig } from "@/lib/analytics/config";
+import { buildAnalyticsConfigQueryString } from "@/lib/analytics/parse-analytics-config";
 import type { TrendsDashboard } from "@/lib/analytics/trends-dashboard";
 import type { TrendsPeriodPreset } from "@/lib/analytics/trends-period";
 
@@ -19,9 +20,7 @@ export async function fetchTrendsDashboard(input: {
   customEnd?: string;
 }): Promise<TrendsApiPayload> {
   const config = getAnalyticsConfig();
-  const params = new URLSearchParams({
-    heldOpenThresholdSeconds: String(config.heldOpenThresholdSeconds),
-  });
+  const params = new URLSearchParams(buildAnalyticsConfigQueryString(config));
 
   if (input.period) {
     params.set("period", input.period);

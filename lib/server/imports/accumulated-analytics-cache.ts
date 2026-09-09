@@ -17,7 +17,7 @@ export function buildAccumulatedAnalyticsCacheKey(
   config: FireExitAnalyticsConfig,
 ): string {
   const importIds = imports.map((record) => record.id).sort().join(",");
-  return `${importIds}|${config.heldOpenThresholdSeconds}|${ANALYTICS_ENGINE_VERSION}`;
+  return `${importIds}|${config.heldOpenThresholdSeconds}|${config.importDataRetentionDays}|${ANALYTICS_ENGINE_VERSION}`;
 }
 
 export function getCachedAccumulatedAnalytics(

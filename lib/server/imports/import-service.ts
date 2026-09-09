@@ -9,6 +9,7 @@ import { createManualImportFromCsv, reprocessImport } from "@/lib/server/imports
 import { rebuildImportsWithCanonicalEngine } from "@/lib/server/imports/rebuild-canonical-analytics";
 import type { ServerImportRecord } from "@/lib/server/types/inbound-email";
 import type { FieldMapping, ImportAnalysisSnapshot } from "@/lib/imports/types";
+import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import type { FireExitAnalyticsConfig } from "@/lib/analytics/types";
 
 export async function createManualCsvImport(input: {
@@ -35,7 +36,7 @@ export async function updateImportMapping(
   });
 
   await rebuildImportsWithCanonicalEngine(
-    config ?? { heldOpenThresholdSeconds: 30 },
+    config ?? DEFAULT_ANALYTICS_CONFIG,
   );
 
   const updated = await getServerImportById(importId);

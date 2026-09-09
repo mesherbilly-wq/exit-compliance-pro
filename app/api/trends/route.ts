@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server";
-import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
 import {
   buildTrendsApiResponse,
   parseTrendsPeriodPreset,
 } from "@/lib/server/trends/build-trends-response";
+import { parseAnalyticsConfigFromRequest } from "@/lib/analytics/parse-analytics-config";
 import { isSupabaseConfigured } from "@/lib/server/env";
 
 export const runtime = "nodejs";
-
-function parseThreshold(request: Request): number {
-  const url = new URL(request.url);
-  const raw = url.searchParams.get("heldOpenThresholdSeconds");
-  const threshold = Number(raw);
-
-  if (Number.isFinite(threshold) && threshold > 0) {
-    return threshold;
-  }
-
-  return DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds;
-}
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -34,17 +22,16 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const preset = parseTrendsPeriodPreset(url.searchParams.get("period"));
-  const hasExplicitPeriod = url.searchParams.has("period");
+    const hasExplicitPeriod = url.searchParams.has("period");
     const customStart = url.searchParams.get("customStart");
     const customEnd = url.searchParams.get("customEnd");
+    const config = parseAnalyticsConfigFromRequest(request);
 
     const response = await buildTrendsApiResponse({
       preset: hasExplicitPeriod ? preset : undefined,
       customStart,
       customEnd,
-      config: {
-        heldOpenThresholdSeconds: parseThreshold(request),
-      },
+      config,
     });
 
     return NextResponse.json(response);

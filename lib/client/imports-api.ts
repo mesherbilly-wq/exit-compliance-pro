@@ -3,7 +3,9 @@ import type {
   ImportAnalysisSnapshot,
   ImportStatus,
 } from "@/lib/imports/types";
+import type { FireExitAnalyticsConfig } from "@/lib/analytics/types";
 import { getAnalyticsConfig } from "@/lib/analytics/config";
+import { buildAnalyticsConfigQueryString } from "@/lib/analytics/parse-analytics-config";
 import type { ServerImportListItem } from "@/lib/server/types/inbound-email";
 import type { ProcessingLogEntry } from "@/lib/server/types/import-management";
 import {
@@ -186,9 +188,9 @@ export async function saveImportSnapshot(
   }
 }
 
-export async function refreshImportAnalysis(config: {
-  heldOpenThresholdSeconds: number;
-}): Promise<{ refreshed: number; skipped: number }> {
+export async function refreshImportAnalysis(
+  config: FireExitAnalyticsConfig,
+): Promise<{ refreshed: number; skipped: number }> {
   const response = await fetch("/api/imports/refresh-analysis", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -208,7 +210,7 @@ export async function refreshImportAnalysis(config: {
 export async function fetchLatestImport(): Promise<ApiImportRecord | null> {
   const config = getAnalyticsConfig();
   const response = await fetch(
-    `/api/imports/latest?heldOpenThresholdSeconds=${config.heldOpenThresholdSeconds}`,
+    `/api/imports/latest?${buildAnalyticsConfigQueryString(config)}`,
   );
   if (!response.ok) {
     return null;

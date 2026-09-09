@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { DEFAULT_ANALYTICS_CONFIG } from "@/lib/analytics/config";
+import { parseAnalyticsConfigFromBody } from "@/lib/analytics/parse-analytics-config";
 import {
   formatExecutiveReportPdfFilename,
   mapExecutiveReportToPdfData,
 } from "@/lib/reports/executive-report-pdf-types";
-import {
-  parseExecutivePdfRequestBody,
-  parseExecutivePdfThreshold,
-} from "@/lib/reports/validate-executive-pdf-request";
+import { parseExecutivePdfRequestBody } from "@/lib/reports/validate-executive-pdf-request";
 import { buildExecutiveReportForExport } from "@/lib/server/reports/build-executive-report-for-export";
 import { renderExecutiveReportPdf } from "@/lib/server/reports/render-executive-report-pdf";
 import { isSupabaseConfigured } from "@/lib/server/env";
@@ -38,11 +35,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  const threshold = parseExecutivePdfThreshold(request, validation.body);
-  const config = {
-    heldOpenThresholdSeconds:
-      threshold ?? DEFAULT_ANALYTICS_CONFIG.heldOpenThresholdSeconds,
-  };
+  const config = parseAnalyticsConfigFromBody(validation.body);
 
   try {
     const exportResult = await buildExecutiveReportForExport({
